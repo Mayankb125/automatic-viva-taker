@@ -1,0 +1,19 @@
+{
+  "subjects": {
+    "Computer Science": [
+      "Data Structures",
+      "Algorithms",
+      "Operating Systems",
+      "Computer Networks",
+      "Database Management",
+      "OOP",
+      "Software Engineering"
+    ],
+    "Electronics": [
+      "Digital Electronics",
+      "Analog Circuits",
+      "Microprocessors",
+      "Signal Processing"
+    ]
+  }
+}
