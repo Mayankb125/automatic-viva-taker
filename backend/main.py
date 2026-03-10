@@ -5,6 +5,9 @@ from app.core.database import engine, Base
 # Import all models so SQLAlchemy knows about them before creating tables
 from app.models import student, session, question, score, integrity_flag
 
+# Import all routers
+from app.api import auth, topics, session as session_router, viva, cv, report
+
 app = FastAPI(title="Automatic Viva Taker API")
 
 # CORS — allow React frontend on port 5173
@@ -18,6 +21,14 @@ app.add_middleware(
 
 # Create all tables on startup
 Base.metadata.create_all(bind=engine)
+
+# Register all routers
+app.include_router(auth.router)
+app.include_router(topics.router)
+app.include_router(session_router.router)
+app.include_router(viva.router)
+app.include_router(cv.router)
+app.include_router(report.router)
 
 
 @app.get("/")
