@@ -3,3 +3,5 @@ uvicorn[standard]
 sqlalchemy
 python-multipart
 python-dotenv
+# Phase 2 — NLP Brain
+google-genai
