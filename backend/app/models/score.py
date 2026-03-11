@@ -65,6 +65,10 @@ class Score(Base):
     # Human-readable explanation of the completeness_score
     completeness_reason = Column(Text, nullable=True)
 
+    # The topic that was being examined when this answer was given.
+    # Denormalised here so score_calculator can group by topic without a JOIN.
+    topic = Column(Text, nullable=True)
+
     # What the adaptive engine decided after seeing this score:
-    # "increase_difficulty" | "decrease_difficulty" | "maintain_difficulty"
+    # "level_up" | "follow_up" | "checkpoint" | "topic_complete" | "session_end" etc.
     adaptive_decision = Column(Text, nullable=True)

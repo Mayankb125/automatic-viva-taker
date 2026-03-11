@@ -55,3 +55,8 @@ class Session(Base):
     # Final weighted score across all questions (0.0–100.0).
     # Calculated and stored when the session ends.
     overall_score = Column(Float, nullable=True)
+
+    # Full adaptive engine state serialised as a JSON string.
+    # Stores current_level, checkpoint state, question counts, topic_scores, etc.
+    # Loaded and written back on every question/answer round-trip.
+    adaptive_state = Column(Text, nullable=True)
