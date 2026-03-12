@@ -11,9 +11,12 @@ Endpoints:
 """
 
 import json
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+
+logger = logging.getLogger(__name__)
 from pydantic import BaseModel
 from sqlalchemy.orm import Session as DBSession
 
@@ -60,7 +63,17 @@ def get_question(session_id: str, db: DBSession = Depends(get_db)):
     current_level = adaptive_state["current_level"]
 
     # ── Call Gemini to generate the question ───────────────────────────────
-    generated = generate_question(topic=current_topic, level=current_level)
+    # generate_question makes an external Gemini API call which can fail due to
+    # network errors, rate limits, or API timeouts. Return a 503 instead of a
+    # raw 500 traceback so the frontend can display a meaningful message.
+    try:
+        generated = generate_question(topic=current_topic, level=current_level)
+    except Exception as exc:
+        logger.exception("generate_question failed for topic %s level %s: %s", current_topic, current_level, exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Question generation temporarily unavailable — please try again.",
+        )
 
     # ── Persist the question row ───────────────────────────────────────────
     question_id = str(uuid.uuid4())
@@ -110,7 +123,11 @@ def submit_answer(body: SubmitAnswerRequest, db: DBSession = Depends(get_db)):
     if not db_session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    db_question = db.query(Question).filter(Question.id == body.question_id).first()
+    db_question = (
+        db.query(Question)
+        .filter(Question.id == body.question_id, Question.session_id == body.session_id)
+        .first()
+    )
     if not db_question:
         raise HTTPException(status_code=404, detail="Question not found")
 
@@ -124,15 +141,25 @@ def submit_answer(body: SubmitAnswerRequest, db: DBSession = Depends(get_db)):
     key_points = json.loads(db_question.key_points) if db_question.key_points else []
 
     # ── Run all 5 scorers ─────────────────────────────────────────────────
-    eval_result = evaluate_answer(
-        question=db_question.question_text,
-        expected_answer=db_question.expected_answer,
-        student_answer=body.text_answer,
-        key_keywords=key_keywords,
-        key_points=key_points,
-        current_level=adaptive_state["current_level"],
-        switched=switched,
-    )
+    # evaluate_answer makes an external Gemini API call (depth scorer) which
+    # can fail due to network errors, rate limits, or API timeouts.
+    # Catch those failures and return a clear 503 rather than a raw 500 traceback.
+    try:
+        eval_result = evaluate_answer(
+            question=db_question.question_text,
+            expected_answer=db_question.expected_answer,
+            student_answer=body.text_answer,
+            key_keywords=key_keywords,
+            key_points=key_points,
+            current_level=adaptive_state["current_level"],
+            switched=switched,
+        )
+    except Exception as exc:
+        logger.exception("evaluate_answer failed for question %s: %s", body.question_id, exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Scoring service temporarily unavailable — please resubmit your answer.",
+        )
 
     # ── Save Score row ────────────────────────────────────────────────────
     db_score = Score(

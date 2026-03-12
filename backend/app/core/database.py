@@ -30,18 +30,22 @@ Usage in route files:
 """
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.core.config import DATABASE_URL
 
-# Create the SQLAlchemy engine that connects to the SQLite database file.
-# check_same_thread=False is required for SQLite when used with FastAPI,
-# because FastAPI may handle a request across multiple threads. Without this,
-# SQLite raises a "SQLite objects created in a thread can only be used in that
-# same thread" error.
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False}
-)
+# Create the SQLAlchemy engine that connects to the database.
+# check_same_thread=False is a SQLite-only argument required when FastAPI
+# handles requests across multiple threads. It must not be passed for other
+# backends (PostgreSQL, MySQL, etc.), so we detect the driver first.
+_url = make_url(DATABASE_URL)
+if _url.drivername.startswith("sqlite"):
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False}
+    )
+else:
+    engine = create_engine(DATABASE_URL)
 
 # SessionLocal is a session factory (not a session itself).
 # autocommit=False — changes must be explicitly committed with db.commit()

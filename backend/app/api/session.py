@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
 from app.core.database import get_db
@@ -35,7 +35,7 @@ router = APIRouter(prefix="/api/session", tags=["session"])
 class StartSessionRequest(BaseModel):
     student_id: str
     subject: str
-    topic_list: list[str]
+    topic_list: list[str] = Field(min_length=1)
 
 
 class EndSessionRequest(BaseModel):
@@ -141,6 +141,15 @@ def switch_topic(body: SwitchTopicRequest, db: DBSession = Depends(get_db)):
     db_session = db.query(Session).filter(Session.id == body.session_id).first()
     if not db_session:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    # Prevent switching topics on a session that is already finished
+    if db_session.status != "active":
+        raise HTTPException(status_code=409, detail="Session is not active")
+
+    # Reject topics that were not in the original topic list for this session
+    allowed_topics = json.loads(db_session.topic_list) if db_session.topic_list else []
+    if body.new_topic not in allowed_topics:
+        raise HTTPException(status_code=400, detail="Invalid topic")
 
     adaptive_state = json.loads(db_session.adaptive_state)
 

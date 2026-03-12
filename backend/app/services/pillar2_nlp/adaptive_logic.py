@@ -134,7 +134,7 @@ def process_answer(session_state: dict, score: float) -> dict:
             # Case 4 — Checkpoint passed: return to original topic, level up
             session_state["checkpoint_asked"] = False
             session_state["current_topic"] = session_state["checkpoint_original_topic"]
-            session_state["current_level"] = session_state["checkpoint_original_level"] + 1
+            session_state["current_level"] = min(5, session_state["checkpoint_original_level"] + 1)
             session_state["questions_on_current_topic"] = 0
             # Ensure topic_scores has an entry for the topic we're returning to
             if session_state["current_topic"] not in session_state["topic_scores"]:

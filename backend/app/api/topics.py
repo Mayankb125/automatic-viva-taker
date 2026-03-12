@@ -42,10 +42,12 @@ def get_topics():
     Raises HTTP 500 if topics.json is missing (should never happen in normal use).
     """
     try:
-        with open(TOPICS_FILE, "r") as f:
+        with open(TOPICS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         return data
     except FileNotFoundError:
-        # This would mean topics.json was deleted from the backend/ directory.
-        # Return a 500 rather than a 404 because this is a server config problem.
+        # topics.json was deleted from the backend/ directory — server config problem.
         raise HTTPException(status_code=500, detail="topics.json not found")
+    except json.JSONDecodeError as exc:
+        # topics.json exists but contains invalid JSON — server config problem.
+        raise HTTPException(status_code=500, detail=f"topics.json is malformed: {exc}")

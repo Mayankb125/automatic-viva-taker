@@ -186,6 +186,9 @@ total = PASS_COUNT + FAIL_COUNT
 print(f"  Results: {PASS_COUNT}/{total} checks passed")
 if FAIL_COUNT == 0:
     print("  ALL 7 CASES PASS ✓ — Ready for Phase 3")
+    print("=" * 60)
+    sys.exit(0)
 else:
     print(f"  {FAIL_COUNT} CHECK(S) FAILED ✗ — Fix before proceeding")
-print("=" * 60)
+    print("=" * 60)
+    sys.exit(1)
