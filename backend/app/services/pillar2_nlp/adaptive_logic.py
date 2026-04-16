@@ -31,15 +31,15 @@ Decision Logic (evaluated in this strict order every time):
   7. score <  5.0 AND checkpoint not active   → checkpoint
 
 Score thresholds:
-  >= 7.0 = strong  → advance
-  5.0–6.9 = partial → follow up same level
-  < 5.0  = weak   → checkpoint on prerequisite
+    >= 6.5 = strong  → advance
+    4.5–6.49 = partial → follow up same level
+    < 4.5  = weak   → checkpoint on prerequisite
 """
 
 # ── Score thresholds ──────────────────────────────────────────────────────────
-STRONG_THRESHOLD   = 7.0   # score >= this → level up or complete
-PARTIAL_THRESHOLD  = 5.0   # score >= this → follow-up question
-CHECKPOINT_PASS    = 7.0   # checkpoint score >= this → return to original topic
+STRONG_THRESHOLD   = 6.5   # score >= this → level up or complete
+PARTIAL_THRESHOLD  = 4.5   # score >= this → follow-up question
+CHECKPOINT_PASS    = 6.5   # checkpoint score >= this → return to original topic
 MAX_QUESTIONS      = 15    # hard session limit — session ends at this count
 
 

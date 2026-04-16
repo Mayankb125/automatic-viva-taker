@@ -8,9 +8,10 @@ the student used the correct technical vocabulary. It complements semantic scori
 semantic catches meaning similarity, keyword scoring catches vocabulary precision.
 
 Matching strategy:
-  - Case-insensitive
-  - Whole-word matching (so "tree" doesn't match inside "subtree")
-  - Each keyword is checked as a substring with word boundaries via regex
+    - Case-insensitive normalized tokens (punctuation-insensitive)
+    - Full phrase match gets full credit per keyword
+    - Multi-word keyword token-overlap gets partial credit (0.25 / 0.5 / 0.75)
+    - Single-word keywords still require exact token presence
 
 Score range: 0.0 to 10.0
   - 10.0 = all keywords mentioned
@@ -44,18 +45,47 @@ def score_keywords(key_keywords: list, student_answer: str) -> float:
     if not key_keywords:
         return 10.0  # No keywords to check — full marks by default
 
-    answer_lower = student_answer.lower()
-    found = 0
+    answer_tokens = re.findall(r"[a-z0-9]+", student_answer.lower())
+    if not answer_tokens:
+        return 0.0
+
+    answer_token_set = set(answer_tokens)
+    answer_normalized = f" {' '.join(answer_tokens)} "
+
+    total_credit = 0.0
+    valid_keyword_count = 0
 
     for keyword in key_keywords:
-        # Case-insensitive whole-word search using word boundary anchors.
-        # \b matches at a word boundary so "tree" won't falsely match inside "subtree".
-        # re.escape handles keywords with special characters like "O(log n)".
-        pattern = r"\b" + re.escape(keyword.lower()) + r"\b"
-        if re.search(pattern, answer_lower):
-            found += 1
+        keyword_tokens = re.findall(r"[a-z0-9]+", str(keyword).lower())
+        if not keyword_tokens:
+            continue
 
-    score = (found / len(key_keywords)) * 10.0
+        valid_keyword_count += 1
+        keyword_phrase = " ".join(keyword_tokens)
+        phrase_hit = f" {keyword_phrase} " in answer_normalized
+
+        if len(keyword_tokens) == 1:
+            total_credit += 1.0 if phrase_hit else 0.0
+            continue
+
+        if phrase_hit:
+            total_credit += 1.0
+            continue
+
+        keyword_token_set = set(keyword_tokens)
+        overlap_ratio = len(keyword_token_set & answer_token_set) / len(keyword_token_set)
+
+        if overlap_ratio >= 0.75:
+            total_credit += 0.75
+        elif overlap_ratio >= 0.50:
+            total_credit += 0.50
+        elif overlap_ratio >= 0.34:
+            total_credit += 0.25
+
+    if valid_keyword_count == 0:
+        return 10.0
+
+    score = (total_credit / valid_keyword_count) * 10.0
     return round(score, 2)
 
 

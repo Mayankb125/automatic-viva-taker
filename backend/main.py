@@ -37,7 +37,10 @@ app = FastAPI(title="Automatic Viva Taker API")
 # is allowed to call http://localhost:8000 (this FastAPI server).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Only allow the local React dev server
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,                   # Allow cookies/auth headers
     allow_methods=["*"],                      # Allow GET, POST, PUT, DELETE, etc.
     allow_headers=["*"],                      # Allow any request headers

@@ -10,13 +10,15 @@ mean the same thing but share no keywords — semantic scoring catches this.
 
 Anti-stuffing protection — 3 layers run BEFORE the model:
   Layer 1 — Relative Length Gate:
-    If the student wrote less than 30% of the expected word count → score = 0.0
-    Catches: "BST BST BST" against a 20-word expected answer
+        If the student wrote less than 15% of the expected word count → score = 0.0
+        If length is between 15% and 30% → apply a soft penalty (not hard zero)
+        Catches: ultra-short answers while still allowing concise but relevant attempts
     Guard: max(1, expected_word_count) prevents division by zero
 
   Layer 2 — Unique Word Gate (only when expected answer > 5 words):
-    After removing stopwords, if unique content words <= 3 → score = 0.0
-    Catches: "BST left right BST left right" (only 3 unique content words)
+        After removing stopwords, if unique content words <= 1 → score = 0.0
+        If unique words are low (2–5), apply a soft penalty multiplier
+        Catches: repetitive stuffing while being less strict for partially-correct answers
     Skipped for short expected answers like "BST" or "LIFO"
 
   Layer 3 — TTR Diversity Penalty:
@@ -89,21 +91,31 @@ def score_semantic(expected_answer: str, student_answer: str) -> float:
     student_word_count = len(student_words)
 
     # ── Layer 1: Relative Length Gate ────────────────────────────────────────
-    # Student must write at least 30% as many words as the expected answer.
+    # Student must write at least 15% as many words as the expected answer.
+    # 15%–30% is no longer a hard zero; it receives a proportional penalty.
     # max(1, ...) prevents division by zero if expected_answer is empty.
     expected_word_count = max(1, len(expected_answer.split()))
     ratio = student_word_count / expected_word_count
+    if ratio < 0.15:
+        return 0.0  # Extremely short answer relative to expected detail level
+    length_penalty = 1.0
     if ratio < 0.3:
-        return 0.0  # Too short relative to what the question demands
+        length_penalty = max(0.35, ratio / 0.3)
 
     # ── Layer 2: Unique Word Gate ─────────────────────────────────────────────
     # Only applied when the expected answer itself requires a real explanation.
     # Short expected answers like "BST" or "LIFO" bypass this gate entirely.
+    unique_penalty = 1.0
     if expected_word_count > 5:
         content = _content_words(student_answer)
         unique_content = set(content)
-        if len(unique_content) <= 3:
-            return 0.0  # Answer is pure keyword repetition
+        unique_count = len(unique_content)
+        if unique_count <= 1:
+            return 0.0  # Answer is near-pure repetition
+        if unique_count <= 3:
+            unique_penalty = 0.45
+        elif unique_count <= 5:
+            unique_penalty = 0.7
 
     # ── Layer 3: TTR Diversity Penalty ────────────────────────────────────────
     # Type-Token Ratio measures vocabulary variety on content words only.
@@ -112,7 +124,7 @@ def score_semantic(expected_answer: str, student_answer: str) -> float:
     content_all = _content_words(student_answer)
     if content_all:
         ttr = len(set(content_all)) / len(content_all)
-        diversity_factor = min(1.0, ttr * 2)
+        diversity_factor = min(1.0, max(0.35, ttr * 2))
     else:
         diversity_factor = 0.0
 
@@ -128,8 +140,9 @@ def score_semantic(expected_answer: str, student_answer: str) -> float:
     similarity = util.cos_sim(embeddings[0], embeddings[1]).item()
     raw_score = max(0.0, min(1.0, similarity))
 
-    # Apply TTR diversity factor — penalises repetitive answers proportionally
-    final_score = raw_score * diversity_factor
+    # Combine soft anti-stuffing penalties so concise but meaningful answers
+    # are not forced to zero unless they are extremely weak or repetitive.
+    final_score = raw_score * diversity_factor * length_penalty * unique_penalty
     return round(final_score, 4)
 
 

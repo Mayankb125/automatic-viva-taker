@@ -1,0 +1,40 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap');
+
+:root {
+  --font-heading: 'Space Grotesk', sans-serif;
+  --font-body: 'Source Sans 3', sans-serif;
+
+  --color-ink-900: #0f2236;
+  --color-ink-700: #25425f;
+  --color-ink-500: #4f6984;
+
+  --color-brand-600: #0d6fb8;
+  --color-brand-500: #2f8dd4;
+  --color-brand-200: #dcedff;
+
+  --color-accent-500: #f28a43;
+  --color-accent-200: #ffe6ce;
+
+  --color-surface-0: #ffffff;
+  --color-surface-50: #f7fbff;
+  --color-surface-100: #eef5fc;
+  --color-page-a: #fef4ea;
+  --color-page-b: #e9f3ff;
+
+  --color-error-600: #b3261e;
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+
+  --shadow-card: 0 20px 55px rgba(14, 40, 70, 0.14);
+  --shadow-soft: 0 8px 20px rgba(22, 65, 108, 0.14);
+}

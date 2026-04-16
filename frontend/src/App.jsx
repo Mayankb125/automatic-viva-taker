@@ -28,8 +28,8 @@ function App() {
     // BrowserRouter enables HTML5 history-based routing (clean URLs, no hash)
     <BrowserRouter>
       <Routes>
-        {/* Default redirect: visiting "/" goes straight to the login page */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        {/* Phase 3: route root directly to topics while auth remains a stub. */}
+        <Route path="/" element={<Navigate to="/topics" replace />} />
 
         {/* Login — existing students sign in here */}
         <Route path="/login" element={<LoginPage />} />

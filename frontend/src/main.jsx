@@ -15,6 +15,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
+import './styles/index.css'
 
 // Create the React root and attach it to the #root div in index.html.
 // App.jsx contains all routing and page components.

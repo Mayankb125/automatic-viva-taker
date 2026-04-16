@@ -1,0 +1,43 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--color-ink-900);
+  background: linear-gradient(135deg, var(--color-page-a) 0%, var(--color-page-b) 100%);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-family: var(--font-heading);
+  line-height: 1.2;
+}
+
+p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}

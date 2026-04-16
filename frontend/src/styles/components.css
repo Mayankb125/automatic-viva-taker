@@ -1,0 +1,112 @@
+.app-shell {
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+  padding: var(--space-6);
+  display: grid;
+  place-items: center;
+}
+
+.app-shell::before,
+.app-shell::after {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(18px);
+  z-index: 0;
+}
+
+.app-shell::before {
+  width: 260px;
+  height: 260px;
+  top: -110px;
+  right: -70px;
+  background: rgba(242, 138, 67, 0.24);
+}
+
+.app-shell::after {
+  width: 280px;
+  height: 280px;
+  bottom: -110px;
+  left: -90px;
+  background: rgba(40, 134, 218, 0.22);
+}
+
+.glass-card {
+  width: min(880px, 100%);
+  position: relative;
+  z-index: 1;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(8px);
+  padding: clamp(20px, 3.2vw, 30px);
+}
+
+.page-kicker {
+  color: var(--color-brand-600);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.page-title {
+  margin-top: var(--space-2);
+  font-size: clamp(1.85rem, 3.6vw, 2.35rem);
+  color: var(--color-ink-900);
+}
+
+.page-subtitle {
+  margin-top: var(--space-2);
+  color: var(--color-ink-700);
+}
+
+.form-label {
+  display: block;
+  margin-top: var(--space-5);
+  margin-bottom: var(--space-2);
+  font-weight: 600;
+  color: var(--color-ink-900);
+}
+
+.form-control {
+  width: 100%;
+  border: 1px solid #bed5ef;
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  background: var(--color-surface-50);
+  color: var(--color-ink-900);
+}
+
+.info-text {
+  margin-top: var(--space-3);
+  color: var(--color-ink-700);
+}
+
+.error-text {
+  margin-top: var(--space-3);
+  color: var(--color-error-600);
+  font-weight: 600;
+}
+
+.section-heading {
+  margin-top: var(--space-5);
+  margin-bottom: var(--space-3);
+  font-size: 1.2rem;
+  color: var(--color-ink-900);
+}
+
+.action-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: var(--space-5);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  background: var(--color-brand-600);
+  color: #fff;
+  font-weight: 600;
+}

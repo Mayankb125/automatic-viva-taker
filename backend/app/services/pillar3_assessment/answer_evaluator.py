@@ -15,7 +15,7 @@ Scoring pipeline:
        confidence    × 0.10   (certainty and fluency)
   4. Add level bonus:   (current_level - 1) × 0.5
        Harder questions are worth more — level 5 gives +2.0 bonus
-  5. Apply switch penalty: -2.0 if the student switched topics
+  5. Apply switch penalty: -1.0 if the student switched topics
        Switching costs points — answers on the original topic matter more
   6. Clamp final score to [0.0, 10.0]
 
@@ -48,7 +48,7 @@ WEIGHTS = {
 LEVEL_BONUS_PER_LEVEL = 0.5
 
 # Penalty applied when the student has switched topics in this session
-SWITCH_PENALTY = 2.0
+SWITCH_PENALTY = 1.0
 
 
 def evaluate_answer(
@@ -84,7 +84,7 @@ def evaluate_answer(
             completeness_reason : str
             weighted_score      : float  0.0–10.0  (before bonuses/penalties)
             level_bonus         : float  0.0+
-            switch_penalty      : float  0.0 or 2.0
+            switch_penalty      : float  0.0 or 1.0
             final_score         : float  0.0–10.0  (clamped)
         }
     """
