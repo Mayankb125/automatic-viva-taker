@@ -7,11 +7,11 @@ export async function getQuestion(sessionId) {
   return response.data
 }
 
-export async function submitAnswer({ sessionId, questionId, textAnswer }) {
+export async function submitAnswer({ sessionId, questionId, audioBlob }) {
   const response = await apiClient.post('/api/viva/answer', {
     session_id: sessionId,
     question_id: questionId,
-    text_answer: textAnswer,
+    audio_blob: audioBlob,
   })
   return response.data
 }

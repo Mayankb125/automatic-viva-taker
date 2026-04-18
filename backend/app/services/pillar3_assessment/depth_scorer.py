@@ -25,13 +25,11 @@ Usage:
     result = score_depth_completeness(question, expected_answer, student_answer, key_points)
 """
 
-import os
 import json
 import re
 from google import genai
-from dotenv import load_dotenv
 
-load_dotenv()
+from app.core.config import GEMINI_API_KEY
 
 
 def score_depth_completeness(
@@ -67,7 +65,7 @@ def score_depth_completeness(
             "completeness_reason": "No answer was provided. All key points missed.",
         }
 
-    api_key = os.getenv("GEMINI_API_KEY", "")
+    api_key = GEMINI_API_KEY.strip()
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY is not set in backend/.env")
 

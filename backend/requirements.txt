@@ -6,3 +6,6 @@ python-dotenv
 # Phase 2 — NLP Brain
 google-genai
 sentence-transformers
+# Phase 4 — Speech
+faster-whisper
+pyttsx3

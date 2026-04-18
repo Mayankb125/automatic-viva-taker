@@ -27,15 +27,12 @@ Usage (standalone test):
     python question_generator.py
 """
 
-import os
 import json
 import re
 import time
 from google import genai
-from dotenv import load_dotenv
 
-# Load GEMINI_API_KEY from backend/.env
-load_dotenv()
+from app.core.config import GEMINI_API_KEY
 
 # Map difficulty level numbers to natural language descriptors used in the prompt.
 # These are sent directly to Gemini so the wording matters — be specific.
@@ -46,6 +43,63 @@ LEVEL_DESCRIPTORS = {
     4: "analysis and comparison (Compare X vs Y, explain tradeoffs, discuss limitations)",
     5: "synthesis and design (Design a system using X, evaluate approaches, justify choices)",
 }
+
+FALLBACK_LEVEL_PROMPTS = {
+    1: "What is {topic}? Give a simple definition and one example.",
+    2: "How does {topic} work? Explain the main idea step by step.",
+    3: "Why is {topic} useful? Compare it with a basic alternative.",
+    4: "Describe a real-world use case of {topic} and discuss trade-offs.",
+    5: "Design an advanced approach using {topic} and discuss edge cases.",
+}
+
+
+def _topic_keywords(topic: str) -> list[str]:
+    """Create a small keyword list from topic words plus core viva terms."""
+    tokens = [word.strip() for word in re.split(r"[^A-Za-z0-9]+", topic) if word.strip()]
+    deduped = []
+    for token in tokens:
+        lower = token.lower()
+        if lower not in deduped:
+            deduped.append(lower)
+
+    base = deduped[:4]
+    extras = ["definition", "working", "example", "limitations"]
+    for item in extras:
+        if item not in base:
+            base.append(item)
+
+    return base[:6]
+
+
+def generate_fallback_question(topic: str, level: int) -> dict:
+    """
+    Build a deterministic local question payload when Gemini is unavailable.
+
+    This keeps the viva session moving during temporary LLM outages.
+    """
+    level = max(1, min(5, level))
+    question = FALLBACK_LEVEL_PROMPTS[level].format(topic=topic)
+
+    expected_answer = (
+        f"A strong answer should define {topic}, explain how it works, "
+        "cover key concepts clearly, and include at least one practical example "
+        "with limitations or trade-offs where relevant."
+    )
+
+    key_points = [
+        f"Clear definition of {topic}",
+        f"Core mechanism or workflow of {topic}",
+        f"Practical example or application of {topic}",
+    ]
+    if level >= 4:
+        key_points.append(f"Trade-offs and limitations of {topic}")
+
+    return {
+        "question": question,
+        "expected_answer": expected_answer,
+        "key_keywords": _topic_keywords(topic),
+        "key_points": key_points,
+    }
 
 
 def generate_question(topic: str, level: int) -> dict:
@@ -64,7 +118,7 @@ def generate_question(topic: str, level: int) -> dict:
         ValueError: If the Gemini response is not valid JSON.
         RuntimeError: If GEMINI_API_KEY is missing from .env.
     """
-    api_key = os.getenv("GEMINI_API_KEY", "")
+    api_key = GEMINI_API_KEY.strip()
     if not api_key:
         raise RuntimeError(
             "GEMINI_API_KEY is not set. Add it to backend/.env file.\n"

@@ -1,15 +1,16 @@
 /**
  * VivaPage.jsx — Live Viva Examination Screen
  * =============================================
- * Phase 3 Step 3.2 implementation:
+ * Phase 4 Step 4.3 implementation:
  *  - Load next question from backend
- *  - Submit typed answer for scoring
+ *  - Submit voice answer for scoring
  *  - Show score breakdown + adaptive decision
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
+import AudioRecorder from '../components/viva/AudioRecorder'
 import QuestionDisplay from '../components/viva/QuestionDisplay'
 import TopicSwitchModal from '../components/viva/TopicSwitchModal'
 import { endSession, getSession } from '../services/sessionService'
@@ -34,7 +35,7 @@ function VivaPage() {
     location.state?.subject || localStorage.getItem('viva_subject') || 'Unknown subject'
 
   const [questionData, setQuestionData] = useState(null)
-  const [answerText, setAnswerText] = useState('')
+  const [audioBlob, setAudioBlob] = useState('')
   const [resultData, setResultData] = useState(null)
   const [topicList, setTopicList] = useState([])
   const [failedTopics, setFailedTopics] = useState([])
@@ -44,6 +45,7 @@ function VivaPage() {
   const [isSwitchingTopic, setIsSwitchingTopic] = useState(false)
   const [isEndingSession, setIsEndingSession] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const currentQuestionAudioRef = useRef(null)
 
   useEffect(() => {
     // Try route state first, then localStorage fallback.
@@ -87,6 +89,35 @@ function VivaPage() {
     loadSessionDetails()
   }, [sessionId])
 
+  useEffect(() => {
+    return () => {
+      if (currentQuestionAudioRef.current) {
+        currentQuestionAudioRef.current.pause()
+      }
+    }
+  }, [])
+
+  async function playQuestionAudio(questionAudio, questionAudioMime) {
+    if (!questionAudio) {
+      return
+    }
+
+    const mimeType = questionAudioMime || 'audio/wav'
+    const src = `data:${mimeType};base64,${questionAudio}`
+
+    try {
+      if (currentQuestionAudioRef.current) {
+        currentQuestionAudioRef.current.pause()
+      }
+
+      const audio = new Audio(src)
+      currentQuestionAudioRef.current = audio
+      await audio.play()
+    } catch {
+      // Browsers may block autoplay. User can manually replay.
+    }
+  }
+
   async function loadQuestion() {
     if (!sessionId) {
       return
@@ -98,7 +129,8 @@ function VivaPage() {
 
       const data = await getQuestion(sessionId)
       setQuestionData(data)
-      setAnswerText('')
+      setAudioBlob('')
+      await playQuestionAudio(data?.question_audio, data?.question_audio_mime)
     } catch (error) {
       setErrorMessage(
         error?.response?.data?.detail ||
@@ -117,7 +149,7 @@ function VivaPage() {
   async function handleSubmitAnswer(event) {
     event.preventDefault()
 
-    if (!sessionId || !questionData?.question_id || !answerText.trim()) {
+    if (!sessionId || !questionData?.question_id || !audioBlob) {
       return
     }
 
@@ -128,7 +160,7 @@ function VivaPage() {
       const data = await submitAnswer({
         sessionId,
         questionId: questionData.question_id,
-        textAnswer: answerText.trim(),
+        audioBlob,
       })
 
       setResultData(data)
@@ -260,17 +292,14 @@ function VivaPage() {
         />
 
         <form className="viva-answer-form" onSubmit={handleSubmitAnswer}>
-          <label htmlFor="answer" className="form-label">
-            Your Answer (text for Phase 3)
+          <label className="form-label">
+            Your Answer (voice for Phase 4)
           </label>
-          <textarea
-            id="answer"
-            className="viva-answer-input"
-            value={answerText}
-            onChange={(event) => setAnswerText(event.target.value)}
-            placeholder="Type your technical answer here..."
-            rows={6}
-            disabled={!questionData || isQuestionLoading || isAnswerSubmitting}
+
+          <AudioRecorder
+            disabled={!questionData || isQuestionLoading || isSwitchingTopic || isEndingSession}
+            isSubmitting={isAnswerSubmitting}
+            onAudioReady={setAudioBlob}
           />
 
           <div className="viva-actions">
@@ -278,13 +307,24 @@ function VivaPage() {
               type="submit"
               className="viva-btn viva-btn-primary"
               disabled={
-                !answerText.trim() ||
+                !audioBlob ||
                 !questionData?.question_id ||
                 isQuestionLoading ||
                 isAnswerSubmitting
               }
             >
               {isAnswerSubmitting ? 'Submitting...' : 'Submit Answer'}
+            </button>
+
+            <button
+              type="button"
+              className="viva-btn viva-btn-secondary"
+              onClick={() =>
+                playQuestionAudio(questionData?.question_audio, questionData?.question_audio_mime)
+              }
+              disabled={!questionData?.question_audio || isAnswerSubmitting}
+            >
+              Replay Question Audio
             </button>
 
             <button

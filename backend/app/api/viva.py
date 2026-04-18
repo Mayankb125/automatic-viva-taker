@@ -7,11 +7,12 @@ All routes are prefixed with /api/viva.
 
 Endpoints:
     GET  /api/viva/question    — Get the next AI-generated question for the student
-    POST /api/viva/answer      — Submit the student's typed answer for scoring
+    POST /api/viva/answer      — Submit the student's audio answer for scoring
 """
 
 import json
 import logging
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,8 +25,10 @@ from app.core.database import get_db
 from app.models.session import Session
 from app.models.question import Question
 from app.models.score import Score
-from app.services.pillar2_nlp.question_generator import generate_question
+from app.services.pillar2_nlp.question_generator import generate_question, generate_fallback_question
 from app.services.pillar2_nlp.adaptive_logic import process_answer
+from app.services.pillar2_nlp.speech_to_text import transcribe_audio_blob
+from app.services.pillar2_nlp.text_to_speech import synthesize_question_audio
 from app.services.pillar3_assessment.answer_evaluator import evaluate_answer
 
 # All routes in this file get the /api/viva prefix automatically
@@ -37,7 +40,7 @@ router = APIRouter(prefix="/api/viva", tags=["viva"])
 class SubmitAnswerRequest(BaseModel):
     session_id: str
     question_id: str
-    text_answer: str
+    audio_blob: str
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -66,13 +69,41 @@ def get_question(session_id: str, db: DBSession = Depends(get_db)):
     # generate_question makes an external Gemini API call which can fail due to
     # network errors, rate limits, or API timeouts. Return a 503 instead of a
     # raw 500 traceback so the frontend can display a meaningful message.
+    generated = None
+    last_generation_error = None
+    for attempt in range(2):
+        try:
+            generated = generate_question(topic=current_topic, level=current_level)
+            break
+        except Exception as exc:
+            last_generation_error = exc
+            logger.warning(
+                "generate_question attempt %s/2 failed for topic %s level %s: %s",
+                attempt + 1,
+                current_topic,
+                current_level,
+                exc,
+            )
+            if attempt == 0:
+                time.sleep(1.0)
+
+    if generated is None:
+        logger.exception(
+            "generate_question failed after retries for topic %s level %s; using fallback question. Last error: %s",
+            current_topic,
+            current_level,
+            last_generation_error,
+        )
+        generated = generate_fallback_question(topic=current_topic, level=current_level)
+
+    # ── Convert question text to spoken audio ─────────────────────────────
     try:
-        generated = generate_question(topic=current_topic, level=current_level)
+        question_audio, question_audio_mime = synthesize_question_audio(generated["question"])
     except Exception as exc:
-        logger.exception("generate_question failed for topic %s level %s: %s", current_topic, current_level, exc)
+        logger.exception("question TTS failed for topic %s level %s: %s", current_topic, current_level, exc)
         raise HTTPException(
             status_code=503,
-            detail="Question generation temporarily unavailable — please try again.",
+            detail="Question audio generation temporarily unavailable — please try again.",
         )
 
     # ── Persist the question row ───────────────────────────────────────────
@@ -96,6 +127,8 @@ def get_question(session_id: str, db: DBSession = Depends(get_db)):
     return {
         "question_id": question_id,
         "question_text": generated["question"],
+        "question_audio": question_audio,
+        "question_audio_mime": question_audio_mime,
         "level": current_level,
         "topic": current_topic,
     }
@@ -140,6 +173,22 @@ def submit_answer(body: SubmitAnswerRequest, db: DBSession = Depends(get_db)):
     key_keywords = json.loads(db_question.key_keywords) if db_question.key_keywords else []
     key_points = json.loads(db_question.key_points) if db_question.key_points else []
 
+    # ── Speech-to-text: audio blob -> transcript ──────────────────────────
+    try:
+        transcribed_answer = transcribe_audio_blob(
+            body.audio_blob,
+            topic=adaptive_state.get("current_topic"),
+            keywords=key_keywords,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid audio input: {exc}")
+    except Exception as exc:
+        logger.exception("Speech transcription failed for question %s: %s", body.question_id, exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Transcription service temporarily unavailable — please record again.",
+        )
+
     # ── Run all 5 scorers ─────────────────────────────────────────────────
     # evaluate_answer makes an external Gemini API call (depth scorer) which
     # can fail due to network errors, rate limits, or API timeouts.
@@ -148,7 +197,7 @@ def submit_answer(body: SubmitAnswerRequest, db: DBSession = Depends(get_db)):
         eval_result = evaluate_answer(
             question=db_question.question_text,
             expected_answer=db_question.expected_answer,
-            student_answer=body.text_answer,
+            student_answer=transcribed_answer,
             key_keywords=key_keywords,
             key_points=key_points,
             current_level=adaptive_state["current_level"],
@@ -167,7 +216,7 @@ def submit_answer(body: SubmitAnswerRequest, db: DBSession = Depends(get_db)):
         question_id=body.question_id,
         session_id=body.session_id,
         topic=adaptive_state["current_topic"],
-        student_answer=body.text_answer,
+        student_answer=transcribed_answer,
         semantic_score=eval_result["semantic_score"],
         keyword_score=eval_result["keyword_score"],
         depth_score=eval_result["depth_score"],
@@ -193,6 +242,7 @@ def submit_answer(body: SubmitAnswerRequest, db: DBSession = Depends(get_db)):
     db.commit()
 
     return {
+        "transcribed_text": transcribed_answer,
         "score_breakdown": {
             "semantic_score":     eval_result["semantic_score"],
             "keyword_score":      eval_result["keyword_score"],
