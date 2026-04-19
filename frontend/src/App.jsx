@@ -26,7 +26,12 @@ import ReportPage from './pages/ReportPage'
 function App() {
   return (
     // BrowserRouter enables HTML5 history-based routing (clean URLs, no hash)
-    <BrowserRouter>
+    <BrowserRouter
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
       <Routes>
         {/* Phase 3: route root directly to topics while auth remains a stub. */}
         <Route path="/" element={<Navigate to="/topics" replace />} />

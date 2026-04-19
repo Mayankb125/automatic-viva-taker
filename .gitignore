@@ -18,6 +18,7 @@ backend/database.db
 data/sessions/
 data/reports/
 data/highlights/
+backend/yolov8*.pt
 
 # Node
 frontend/node_modules/

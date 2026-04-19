@@ -72,6 +72,9 @@ function ReportPage() {
   const switchedTopics = report?.switched_topics || []
   const overallScore = report?.overall_score ?? reportSummary?.overall_score ?? 0
   const totalQuestions = report?.total_questions ?? totalQuestionsFromSummary ?? 0
+  const integritySummary = report?.integrity_summary
+  const integrityByType = integritySummary?.by_type || {}
+  const recentIntegrityFlags = integritySummary?.recent_flags || []
 
   return (
     <div className="app-shell">
@@ -149,6 +152,34 @@ function ReportPage() {
                   <li key={topic}>{topic}</li>
                 ))}
               </ul>
+            )}
+
+            <h2 className="section-heading">Integrity Flags</h2>
+            {integritySummary && integritySummary.total_flags > 0 ? (
+              <>
+                <p className="info-text">Total Flags: {integritySummary.total_flags}</p>
+                <div className="report-topic-grid">
+                  {Object.entries(integrityByType).map(([flagType, count]) => (
+                    <article className="report-topic-card" key={flagType}>
+                      <h3 className="report-topic-title">{flagType}</h3>
+                      <p className="report-topic-score">Count: {count}</p>
+                    </article>
+                  ))}
+                </div>
+
+                {recentIntegrityFlags.length > 0 && (
+                  <ul className="report-switched-list">
+                    {recentIntegrityFlags.map((flag, index) => (
+                      <li key={`${flag.flag_type}-${flag.timestamp}-${index}`}>
+                        {flag.flag_type}
+                        {flag.description ? ` - ${flag.description}` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ) : (
+              <p className="info-text">No integrity flags recorded in this session.</p>
             )}
           </>
         )}

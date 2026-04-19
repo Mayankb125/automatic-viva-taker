@@ -165,9 +165,10 @@ def process_answer(session_state: dict, score: float) -> dict:
         session_state["decision"] = "follow_up"
         return session_state
 
-    # Case 3 — Weak answer: ask a checkpoint question on a prerequisite topic
+    # Case 3 — Weak answer: ask an easier checkpoint question in the same topic
     session_state["checkpoint_asked"] = True
     session_state["checkpoint_original_topic"] = current_topic
     session_state["checkpoint_original_level"] = session_state["current_level"]
+    session_state["current_level"] = max(1, session_state["current_level"] - 1)
     session_state["decision"] = "checkpoint"
     return session_state

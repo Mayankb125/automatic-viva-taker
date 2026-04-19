@@ -7,12 +7,15 @@
  *  - Show score breakdown + adaptive decision
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
 import AudioRecorder from '../components/viva/AudioRecorder'
+import IntegrityAlert from '../components/viva/IntegrityAlert'
 import QuestionDisplay from '../components/viva/QuestionDisplay'
 import TopicSwitchModal from '../components/viva/TopicSwitchModal'
+import WebcamFeed from '../components/viva/WebcamFeed'
+import { analyzeFrame } from '../services/cvService'
 import { endSession, getSession } from '../services/sessionService'
 import { switchTopic } from '../services/topicService'
 import { getQuestion, submitAnswer } from '../services/vivaService'
@@ -45,7 +48,14 @@ function VivaPage() {
   const [isSwitchingTopic, setIsSwitchingTopic] = useState(false)
   const [isEndingSession, setIsEndingSession] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [cvErrorMessage, setCvErrorMessage] = useState('')
+  const [integrityAlert, setIntegrityAlert] = useState(null)
+  const [integrityFlagHistory, setIntegrityFlagHistory] = useState([])
+  const [gazeLiveState, setGazeLiveState] = useState(null)
+
   const currentQuestionAudioRef = useRef(null)
+  const integrityAlertTimerRef = useRef(null)
+  const hasShownCvErrorRef = useRef(false)
 
   useEffect(() => {
     // Try route state first, then localStorage fallback.
@@ -94,8 +104,99 @@ function VivaPage() {
       if (currentQuestionAudioRef.current) {
         currentQuestionAudioRef.current.pause()
       }
+      if (integrityAlertTimerRef.current) {
+        clearTimeout(integrityAlertTimerRef.current)
+      }
     }
   }, [])
+
+  const handleCvError = useCallback((message) => {
+    if (!hasShownCvErrorRef.current) {
+      setCvErrorMessage(message)
+      hasShownCvErrorRef.current = true
+    }
+  }, [])
+
+  const handleFrameCapture = useCallback(
+    async (frameDataUrl) => {
+      if (!sessionId || !questionData?.question_id) {
+        return
+      }
+
+      try {
+        const cvData = await analyzeFrame({
+          sessionId,
+          questionId: questionData.question_id,
+          frame: frameDataUrl,
+          capturedAt: Date.now() / 1000,
+        })
+
+        const persistedFlags = Array.isArray(cvData?.flags) ? cvData.flags : []
+        const liveFlags = Array.isArray(cvData?.live_flags) ? cvData.live_flags : []
+        const flags = [...new Set([...liveFlags, ...persistedFlags])]
+        const reasons = Array.isArray(cvData?.live_flag_reasons) ? cvData.live_flag_reasons : []
+        const gazeReason = reasons.find((item) => item?.flag_type === 'gaze_deviation')?.reason
+        const gazeRaw = cvData?.details?.gaze_check?.raw
+        setGazeLiveState(gazeRaw || null)
+
+        if (flags.length > 0) {
+          const uniqueFlags = [...new Set(flags)]
+          const label = uniqueFlags.join(', ')
+          const alertMessage =
+            uniqueFlags.includes('gaze_deviation')
+              ? `Please look at the screen/camera. ${gazeReason || 'Gaze deviation detected.'}`
+              : `Please stay focused on screen. Detected: ${label}`
+
+          setIntegrityFlagHistory((prev) => [...new Set([...prev, ...uniqueFlags])])
+          setIntegrityAlert({ message: alertMessage, createdAt: Date.now() })
+
+          if (integrityAlertTimerRef.current) {
+            clearTimeout(integrityAlertTimerRef.current)
+          }
+          integrityAlertTimerRef.current = setTimeout(() => {
+            setIntegrityAlert(null)
+          }, 3500)
+          return
+        }
+
+        // Soft real-time warning before hard violation threshold is reached.
+        const gazeDirection = gazeRaw?.gaze_direction
+        const softAwayDuration = Number(gazeRaw?.away_duration_seconds || 0)
+        const shouldShowSoftWarning =
+          gazeDirection === 'no_face' || gazeDirection === 'no_eyes'
+            ? softAwayDuration >= 1.0
+            : softAwayDuration >= 0.8
+        if (
+          gazeDirection &&
+          !['center', 'unknown', 'unavailable'].includes(gazeDirection) &&
+          shouldShowSoftWarning
+        ) {
+          const softMessage =
+            gazeDirection === 'no_face'
+              ? 'Face not visible. Please stay in camera frame.'
+              : gazeDirection === 'no_eyes'
+                ? 'Eyes not visible clearly. Please face camera and look at screen.'
+              : `Eyes look away (${gazeDirection}). Please focus on screen.`
+
+          setIntegrityAlert({ message: softMessage, createdAt: Date.now() })
+
+          if (integrityAlertTimerRef.current) {
+            clearTimeout(integrityAlertTimerRef.current)
+          }
+          integrityAlertTimerRef.current = setTimeout(() => {
+            setIntegrityAlert(null)
+          }, 1500)
+        }
+      } catch (error) {
+        if (!hasShownCvErrorRef.current) {
+          const detail = error?.response?.data?.detail || 'Proctoring analysis unavailable.'
+          setCvErrorMessage(detail)
+          hasShownCvErrorRef.current = true
+        }
+      }
+    },
+    [questionData?.question_id, sessionId]
+  )
 
   async function playQuestionAudio(questionAudio, questionAudioMime) {
     if (!questionAudio) {
@@ -178,7 +279,12 @@ function VivaPage() {
           setFailedTopics((prev) => (prev.includes(failedTopic) ? prev : [...prev, failedTopic]))
         }
         setIsTopicModalOpen(true)
+        return
       }
+
+      // Auto-progress to the next adaptive question after every scored answer.
+      // This covers follow_up, checkpoint, level_up, and return_to_original decisions.
+      await loadQuestion()
     } catch (error) {
       setErrorMessage(
         error?.response?.data?.detail ||
@@ -277,6 +383,40 @@ function VivaPage() {
             <strong>Subject:</strong> {subject}
           </p>
         </div>
+
+        <WebcamFeed
+          active={Boolean(sessionId && questionData?.question_id)}
+          captureIntervalMs={1000}
+          onFrameCapture={handleFrameCapture}
+          onError={handleCvError}
+        />
+
+        <IntegrityAlert alert={integrityAlert} />
+
+        {cvErrorMessage && (
+          <p className="info-text">
+            Proctoring note: {cvErrorMessage}
+          </p>
+        )}
+
+        {integrityFlagHistory.length > 0 && (
+          <p className="info-text">
+            Integrity flags seen: {integrityFlagHistory.join(', ')}
+          </p>
+        )}
+
+        {gazeLiveState && (
+          <p className="info-text">
+            Gaze live: {String(gazeLiveState.gaze_direction || 'unknown')} |
+            duration: {Number(gazeLiveState.away_duration_seconds || 0).toFixed(1)}s |
+            engine: {String(gazeLiveState.engine || 'unknown')} |
+            eyes: {String(gazeLiveState.eyes_detected ?? 'n/a')} |
+            confident: {String(gazeLiveState.eyes_confident ?? 'n/a')} |
+            ratio: {String(gazeLiveState.avg_eye_ratio ?? 'n/a')} |
+            baseline: {String(gazeLiveState.eye_baseline ?? 'n/a')} |
+            samples: {String(gazeLiveState.eye_baseline_samples ?? 'n/a')}
+          </p>
+        )}
 
         {!sessionId && (
           <p className="error-text">

@@ -1,0 +1,7 @@
+# Phase 5 - Computer Vision dependencies
+# Install separately from main requirements to avoid blocking non-CV setups.
+# Recommended Python for full CV stack: 3.11 or 3.12.
+
+opencv-python>=4.9.0
+ultralytics>=8.2.0
+mediapipe>=0.10.0; python_version < "3.13"

@@ -9,3 +9,5 @@ sentence-transformers
 # Phase 4 — Speech
 faster-whisper
 pyttsx3
+# Phase 5 — Computer Vision
+# Install optional CV stack from requirements-cv.txt
