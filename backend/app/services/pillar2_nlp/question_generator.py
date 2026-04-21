@@ -1,7 +1,7 @@
 """
 pillar2_nlp/question_generator.py — AI Question Generator
 ===========================================================
-Uses the Google Gemini API to generate exam questions for the viva.
+Uses the xAI Grok API to generate exam questions for the viva.
 
 Inputs:
     topic (str)  — The subject topic, e.g. "Data Structures"
@@ -30,12 +30,13 @@ Usage (standalone test):
 import json
 import re
 import time
-from google import genai
+from difflib import SequenceMatcher
+from openai import OpenAI
 
-from app.core.config import GEMINI_API_KEY
+from app.core.config import GROK_API_KEY, GROK_MODEL, XAI_BASE_URL
 
 # Map difficulty level numbers to natural language descriptors used in the prompt.
-# These are sent directly to Gemini so the wording matters — be specific.
+# These are sent directly to Grok so the wording matters — be specific.
 LEVEL_DESCRIPTORS = {
     1: "basic recall and definition (What is X? Define X.)",
     2: "conceptual understanding and explanation (How does X work? Why is X used?)",
@@ -45,12 +46,70 @@ LEVEL_DESCRIPTORS = {
 }
 
 FALLBACK_LEVEL_PROMPTS = {
-    1: "What is {topic}? Give a simple definition and one example.",
-    2: "How does {topic} work? Explain the main idea step by step.",
-    3: "Why is {topic} useful? Compare it with a basic alternative.",
-    4: "Describe a real-world use case of {topic} and discuss trade-offs.",
-    5: "Design an advanced approach using {topic} and discuss edge cases.",
+    1: [
+        "What is {topic}? Give a simple definition and one example.",
+        "Define {topic} in your own words and mention one practical use.",
+        "Explain the core idea of {topic} with a short example scenario.",
+    ],
+    2: [
+        "How does {topic} work? Explain the main idea step by step.",
+        "Describe the workflow of {topic} and why each step matters.",
+        "When would you use {topic}, and how does it operate in practice?",
+    ],
+    3: [
+        "Why is {topic} useful? Compare it with a basic alternative.",
+        "Apply {topic} to a small problem and explain your approach.",
+        "Give a concrete use case for {topic} and justify why it fits.",
+    ],
+    4: [
+        "Describe a real-world use case of {topic} and discuss trade-offs.",
+        "Compare {topic} with a similar approach and explain key trade-offs.",
+        "Analyse limitations of {topic} and suggest where it still performs well.",
+    ],
+    5: [
+        "Design an advanced approach using {topic} and discuss edge cases.",
+        "Propose a robust design using {topic} and justify major decisions.",
+        "How would you optimise a system built on {topic} for scale and reliability?",
+    ],
 }
+
+
+def _normalize_question_text(text: str) -> str:
+    """Normalize question text for robust near-duplicate checks."""
+    lowered = (text or "").strip().lower()
+    lowered = re.sub(r"[^a-z0-9\s]", " ", lowered)
+    lowered = re.sub(r"\s+", " ", lowered)
+    return lowered.strip()
+
+
+def is_question_too_similar(
+    question_text: str,
+    recent_questions: list[str] | None = None,
+    similarity_threshold: float = 0.88,
+) -> bool:
+    """Return True when a candidate question is too close to recent questions."""
+    if not question_text or not recent_questions:
+        return False
+
+    candidate = _normalize_question_text(question_text)
+    if not candidate:
+        return False
+
+    for recent in recent_questions:
+        normalized_recent = _normalize_question_text(recent)
+        if not normalized_recent:
+            continue
+
+        if candidate == normalized_recent:
+            return True
+
+        if len(candidate) > 24 and (candidate in normalized_recent or normalized_recent in candidate):
+            return True
+
+        if SequenceMatcher(None, candidate, normalized_recent).ratio() >= similarity_threshold:
+            return True
+
+    return False
 
 
 def _topic_keywords(topic: str) -> list[str]:
@@ -71,14 +130,29 @@ def _topic_keywords(topic: str) -> list[str]:
     return base[:6]
 
 
-def generate_fallback_question(topic: str, level: int) -> dict:
+def generate_fallback_question(
+    topic: str,
+    level: int,
+    recent_questions: list[str] | None = None,
+) -> dict:
     """
-    Build a deterministic local question payload when Gemini is unavailable.
+    Build a deterministic local question payload when Grok is unavailable.
 
     This keeps the viva session moving during temporary LLM outages.
     """
     level = max(1, min(5, level))
-    question = FALLBACK_LEVEL_PROMPTS[level].format(topic=topic)
+    templates = FALLBACK_LEVEL_PROMPTS[level]
+
+    # Rotate candidate order so fallback does not keep repeating a single phrase.
+    offset = (len(recent_questions or []) + len(topic)) % len(templates)
+    ordered_templates = templates[offset:] + templates[:offset]
+
+    question = ordered_templates[0].format(topic=topic)
+    for template in ordered_templates:
+        candidate_question = template.format(topic=topic)
+        if not is_question_too_similar(candidate_question, recent_questions):
+            question = candidate_question
+            break
 
     expected_answer = (
         f"A strong answer should define {topic}, explain how it works, "
@@ -102,7 +176,11 @@ def generate_fallback_question(topic: str, level: int) -> dict:
     }
 
 
-def generate_question(topic: str, level: int) -> dict:
+def generate_question(
+    topic: str,
+    level: int,
+    recent_questions: list[str] | None = None,
+) -> dict:
     """
     Generate one exam question for the given topic at the given difficulty level.
 
@@ -115,28 +193,36 @@ def generate_question(topic: str, level: int) -> dict:
         All values are strings or lists of strings.
 
     Raises:
-        ValueError: If the Gemini response is not valid JSON.
-        RuntimeError: If GEMINI_API_KEY is missing from .env.
+        ValueError: If the Grok response is not valid JSON.
+        RuntimeError: If GROK_API_KEY is missing from .env.
     """
-    api_key = GEMINI_API_KEY.strip()
+    api_key = GROK_API_KEY.strip()
     if not api_key:
         raise RuntimeError(
-            "GEMINI_API_KEY is not set. Add it to backend/.env file.\n"
-            "Example: GEMINI_API_KEY=AIza..."
+            "GROK_API_KEY is not set. Add it to backend/.env file.\n"
+            "Example: GROK_API_KEY=xai-..."
         )
 
-    # Create the Gemini client with the API key from .env
-    client = genai.Client(api_key=api_key)
+    # Create the Grok client using xAI's OpenAI-compatible endpoint.
+    client = OpenAI(api_key=api_key, base_url=XAI_BASE_URL)
 
     # Clamp level to valid range just in case adaptive logic sends an out-of-range value
     level = max(1, min(5, level))
     level_description = LEVEL_DESCRIPTORS[level]
 
-    # The prompt asks Gemini to return ONLY a JSON object — no markdown, no extra text.
+    recent_constraints = ""
+    if recent_questions:
+        trimmed_recent = [q.strip() for q in recent_questions if q and q.strip()][:5]
+        if trimmed_recent:
+            recent_constraints = "\nAvoid repeating or lightly rephrasing these recent questions:\n"
+            recent_constraints += "\n".join(f"- {q}" for q in trimmed_recent)
+
+    # The prompt asks Grok to return ONLY a JSON object — no markdown, no extra text.
     # This makes it safe to call json.loads() directly on the response.
     prompt = f"""You are an examiner conducting an oral exam on the topic: "{topic}".
 
 Generate ONE exam question at difficulty level {level} ({level_description}).
+{recent_constraints}
 
 Respond with ONLY a JSON object (no markdown, no code blocks, no extra text):
 {{
@@ -154,14 +240,18 @@ Rules:
 - All values must be in English
 - Do NOT include any text outside the JSON object"""
 
-    # Use gemini-2.5-flash — latest stable model, fast, high quality structured output
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
+    # Use configured Grok model via chat completions endpoint.
+    response = client.chat.completions.create(
+        model=GROK_MODEL,
+        messages=[
+            {"role": "system", "content": "You are a strict JSON-only assistant."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.2,
     )
-    raw_text = response.text.strip()
+    raw_text = (response.choices[0].message.content or "").strip()
 
-    # Strip markdown code fences if Gemini wraps the JSON anyway (defensive)
+    # Strip markdown code fences if Grok wraps the JSON anyway (defensive)
     # e.g. ```json { ... } ``` -> { ... }
     raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
     raw_text = re.sub(r"\s*```$", "", raw_text)
@@ -170,7 +260,7 @@ Rules:
         result = json.loads(raw_text)
     except json.JSONDecodeError as e:
         raise ValueError(
-            f"Gemini returned non-JSON response.\n"
+            f"Grok returned non-JSON response.\n"
             f"Raw response: {raw_text}\n"
             f"JSON error: {e}"
         )
@@ -179,7 +269,10 @@ Rules:
     required_keys = {"question", "expected_answer", "key_keywords", "key_points"}
     missing = required_keys - set(result.keys())
     if missing:
-        raise ValueError(f"Gemini response is missing keys: {missing}. Got: {result}")
+        raise ValueError(f"Grok response is missing keys: {missing}. Got: {result}")
+
+    if is_question_too_similar(result.get("question", ""), recent_questions):
+        raise ValueError("Generated question is too similar to a recently asked question")
 
     return result
 

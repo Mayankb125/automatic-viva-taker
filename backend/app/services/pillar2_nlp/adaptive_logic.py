@@ -20,6 +20,7 @@ Session State (dict passed in and returned updated):
   state                      : str   — "active" | "completed"
   topic_scores               : dict  — { topic: [score1, score2, ...] }
   question_history           : list  — list of past question identifiers
+    weak_attempt_streak        : int   — consecutive weak answers at current topic/level
 
 Decision Logic (evaluated in this strict order every time):
   1. total_questions_asked >= 15              → session_end
@@ -28,12 +29,13 @@ Decision Logic (evaluated in this strict order every time):
   4. current_level == 5 AND score >= 7.0      → topic_complete
   5. score >= 7.0                             → level_up
   6. score >= 5.0                             → follow_up
-  7. score <  5.0 AND checkpoint not active   → checkpoint
+    7. first weak answer                         → retry_same_level
+    8. repeated weak answer                      → checkpoint
 
 Score thresholds:
     >= 6.5 = strong  → advance
     4.5–6.49 = partial → follow up same level
-    < 4.5  = weak   → checkpoint on prerequisite
+    < 4.5  = weak   → retry same level once, then checkpoint
 """
 
 # ── Score thresholds ──────────────────────────────────────────────────────────
@@ -78,6 +80,7 @@ def make_session_state(
         "state":                      "active",
         "topic_scores":               {first_topic: []},
         "question_history":           [],
+        "weak_attempt_streak":        0,
         "show_topic_modal":           False,
         "decision":                   None,
     }
@@ -106,9 +109,12 @@ def process_answer(session_state: dict, score: float) -> dict:
         "topic_complete"     — reached level 5 with strong answer, topic done
         "level_up"           — strong answer, increase difficulty
         "follow_up"          — partial answer, ask clarifying question same level
+        "retry_same_level"   — weak answer once, ask a new question at same level
         "checkpoint"         — weak answer, ask prerequisite question on related topic
     """
     current_topic = session_state["current_topic"]
+    weak_attempt_streak = int(session_state.get("weak_attempt_streak", 0) or 0)
+    session_state["weak_attempt_streak"] = weak_attempt_streak
 
     # ── Record this score ─────────────────────────────────────────────────────
     if current_topic not in session_state["topic_scores"]:
@@ -130,6 +136,7 @@ def process_answer(session_state: dict, score: float) -> dict:
 
     # Cases 4 & 5 — Checkpoint resolution (checkpoint was active)
     if session_state["checkpoint_asked"]:
+        session_state["weak_attempt_streak"] = 0
         if score >= CHECKPOINT_PASS:
             # Case 4 — Checkpoint passed: return to original topic, level up
             session_state["checkpoint_asked"] = False
@@ -150,22 +157,32 @@ def process_answer(session_state: dict, score: float) -> dict:
 
     # Case 6 — Topic complete (max level + strong answer)
     if session_state["current_level"] >= 5 and score >= STRONG_THRESHOLD:
+        session_state["weak_attempt_streak"] = 0
         session_state["state"] = "completed"
         session_state["decision"] = "topic_complete"
         return session_state
 
     # Case 1 — Strong answer: level up
     if score >= STRONG_THRESHOLD:
+        session_state["weak_attempt_streak"] = 0
         session_state["current_level"] = min(5, session_state["current_level"] + 1)
         session_state["decision"] = "level_up"
         return session_state
 
     # Case 2 — Partial answer: follow-up at same level
     if score >= PARTIAL_THRESHOLD:
+        session_state["weak_attempt_streak"] = 0
         session_state["decision"] = "follow_up"
         return session_state
 
-    # Case 3 — Weak answer: ask an easier checkpoint question in the same topic
+    # Case 3 — First weak answer: keep same level and ask a different question.
+    if weak_attempt_streak < 1:
+        session_state["weak_attempt_streak"] = weak_attempt_streak + 1
+        session_state["decision"] = "retry_same_level"
+        return session_state
+
+    # Case 4 — Repeated weak answer: move to checkpoint flow.
+    session_state["weak_attempt_streak"] = 0
     session_state["checkpoint_asked"] = True
     session_state["checkpoint_original_topic"] = current_topic
     session_state["checkpoint_original_level"] = session_state["current_level"]

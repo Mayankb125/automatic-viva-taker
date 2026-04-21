@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
+const FRAME_WIDTH = 640
+const FRAME_HEIGHT = 360
+
 function WebcamFeed({
   active,
   captureIntervalMs = 1000,
@@ -27,8 +30,9 @@ function WebcamFeed({
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 640 },
-            height: { ideal: 360 },
+            width: { ideal: FRAME_WIDTH },
+            height: { ideal: FRAME_HEIGHT },
+            aspectRatio: { ideal: FRAME_WIDTH / FRAME_HEIGHT },
             facingMode: 'user',
           },
           audio: false,
@@ -81,9 +85,10 @@ function WebcamFeed({
         return
       }
 
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      context.drawImage(video, 0, 0, canvas.width, canvas.height)
+      // Keep outbound CV frames stable for deterministic backend processing.
+      canvas.width = FRAME_WIDTH
+      canvas.height = FRAME_HEIGHT
+      context.drawImage(video, 0, 0, FRAME_WIDTH, FRAME_HEIGHT)
 
       const frameDataUrl = canvas.toDataURL('image/jpeg', 0.8)
       inFlightRef.current = true
@@ -113,6 +118,8 @@ function WebcamFeed({
       <video
         ref={videoRef}
         className="viva-webcam-video"
+        width={FRAME_WIDTH}
+        height={FRAME_HEIGHT}
         autoPlay
         playsInline
         muted

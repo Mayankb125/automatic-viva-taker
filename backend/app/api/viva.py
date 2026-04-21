@@ -65,27 +65,44 @@ def get_question(session_id: str, db: DBSession = Depends(get_db)):
     current_topic = adaptive_state["current_topic"]
     current_level = adaptive_state["current_level"]
 
+    # Pull recent same-topic/same-level questions to avoid near-duplicate prompts.
+    recent_rows = (
+        db.query(Question.question_text)
+        .filter(
+            Question.session_id == session_id,
+            Question.topic == current_topic,
+            Question.level == current_level,
+        )
+        .order_by(Question.asked_at.desc())
+        .limit(8)
+        .all()
+    )
+    recent_questions = [row[0] for row in recent_rows if row and row[0]]
+
     # ── Call Gemini to generate the question ───────────────────────────────
     # generate_question makes an external Gemini API call which can fail due to
     # network errors, rate limits, or API timeouts. Return a 503 instead of a
     # raw 500 traceback so the frontend can display a meaningful message.
     generated = None
     last_generation_error = None
-    for attempt in range(2):
+    for attempt in range(4):
         try:
-            generated = generate_question(topic=current_topic, level=current_level)
+            generated = generate_question(
+                topic=current_topic,
+                level=current_level,
+                recent_questions=recent_questions,
+            )
             break
         except Exception as exc:
             last_generation_error = exc
             logger.warning(
-                "generate_question attempt %s/2 failed for topic %s level %s: %s",
+                "generate_question attempt %s/4 failed for topic %s level %s: %s",
                 attempt + 1,
                 current_topic,
                 current_level,
                 exc,
             )
-            if attempt == 0:
-                time.sleep(1.0)
+            time.sleep(0.5)
 
     if generated is None:
         logger.exception(
@@ -94,7 +111,11 @@ def get_question(session_id: str, db: DBSession = Depends(get_db)):
             current_level,
             last_generation_error,
         )
-        generated = generate_fallback_question(topic=current_topic, level=current_level)
+        generated = generate_fallback_question(
+            topic=current_topic,
+            level=current_level,
+            recent_questions=recent_questions,
+        )
 
     # ── Convert question text to spoken audio ─────────────────────────────
     try:
@@ -111,6 +132,7 @@ def get_question(session_id: str, db: DBSession = Depends(get_db)):
     db_question = Question(
         id=question_id,
         session_id=session_id,
+        topic=current_topic,
         question_text=generated["question"],
         expected_answer=generated["expected_answer"],
         key_keywords=json.dumps(generated["key_keywords"]),

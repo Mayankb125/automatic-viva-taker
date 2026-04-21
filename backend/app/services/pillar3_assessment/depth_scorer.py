@@ -1,7 +1,7 @@
 """
 pillar3_assessment/depth_scorer.py — Depth & Completeness Scorer (LLM)
 ========================================================================
-Uses Gemini to evaluate two subjective dimensions of the student's answer:
+Uses Grok to evaluate two subjective dimensions of the student's answer:
 
   depth_score       — How thoroughly did the student explain their answer?
                       Did they go beyond surface definitions to show real understanding?
@@ -9,7 +9,7 @@ Uses Gemini to evaluate two subjective dimensions of the student's answer:
   completeness_score — Did the student cover all the key conceptual points?
                        Measured against key_points from the question generator.
 
-These two scores are evaluated together in a single Gemini API call (LLM Call 2)
+These two scores are evaluated together in a single Grok API call (LLM Call 2)
 because both require understanding context, not just string matching.
 
 Output dict:
@@ -27,9 +27,9 @@ Usage:
 
 import json
 import re
-from google import genai
+from openai import OpenAI
 
-from app.core.config import GEMINI_API_KEY
+from app.core.config import GROK_API_KEY, GROK_MODEL, XAI_BASE_URL
 
 
 def score_depth_completeness(
@@ -39,7 +39,7 @@ def score_depth_completeness(
     key_points: list,
 ) -> dict:
     """
-    Use Gemini to evaluate depth and completeness of the student's answer.
+    Use Grok to evaluate depth and completeness of the student's answer.
 
     Args:
         question:        The exam question that was asked.
@@ -53,8 +53,8 @@ def score_depth_completeness(
             depth_reason (str), completeness_reason (str)
 
     Raises:
-        RuntimeError: If GEMINI_API_KEY is missing.
-        ValueError:   If Gemini returns invalid JSON.
+        RuntimeError: If GROK_API_KEY is missing.
+        ValueError:   If Grok returns invalid JSON.
     """
     # Handle empty answer without making an API call
     if not student_answer or not student_answer.strip():
@@ -65,11 +65,11 @@ def score_depth_completeness(
             "completeness_reason": "No answer was provided. All key points missed.",
         }
 
-    api_key = GEMINI_API_KEY.strip()
+    api_key = GROK_API_KEY.strip()
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY is not set in backend/.env")
+        raise RuntimeError("GROK_API_KEY is not set in backend/.env")
 
-    client = genai.Client(api_key=api_key)
+    client = OpenAI(api_key=api_key, base_url=XAI_BASE_URL)
 
     # Format key_points as a numbered list for the prompt
     key_points_text = "\n".join(f"  {i+1}. {pt}" for i, pt in enumerate(key_points))
@@ -109,13 +109,17 @@ Respond with ONLY a JSON object (no markdown, no code blocks):
     "completeness_reason": "<one sentence listing which key points were covered and which were missing>"
 }}"""
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
+    response = client.chat.completions.create(
+        model=GROK_MODEL,
+        messages=[
+            {"role": "system", "content": "You are a strict JSON-only examiner."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.2,
     )
-    raw_text = response.text.strip()
+    raw_text = (response.choices[0].message.content or "").strip()
 
-    # Strip markdown fences if Gemini wraps the response
+    # Strip markdown fences if Grok wraps the response
     raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
     raw_text = re.sub(r"\s*```$", "", raw_text)
 
@@ -123,7 +127,7 @@ Respond with ONLY a JSON object (no markdown, no code blocks):
         result = json.loads(raw_text)
     except json.JSONDecodeError as e:
         raise ValueError(
-            f"Gemini returned non-JSON response.\n"
+            f"Grok returned non-JSON response.\n"
             f"Raw: {raw_text}\nError: {e}"
         )
 
@@ -131,7 +135,7 @@ Respond with ONLY a JSON object (no markdown, no code blocks):
     required_keys = {"depth_score", "completeness_score", "depth_reason", "completeness_reason"}
     missing = required_keys - set(result.keys())
     if missing:
-        raise ValueError(f"Gemini response missing keys: {missing}")
+        raise ValueError(f"Grok response missing keys: {missing}")
 
     result["depth_score"] = round(max(0.0, min(10.0, float(result["depth_score"]))), 2)
     result["completeness_score"] = round(max(0.0, min(10.0, float(result["completeness_score"]))), 2)

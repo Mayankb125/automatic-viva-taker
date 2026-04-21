@@ -5,7 +5,9 @@ Reads settings from the .env file in the backend/ directory and exposes them
 as module-level variables so any other file can import them cleanly.
 
 Required .env keys:
-    GEMINI_API_KEY  — Google Gemini API key used by the NLP question generator (Phase 2)
+    GROK_API_KEY    — xAI Grok API key used by NLP generation and scoring (Phase 2/3)
+    GROK_MODEL      — Grok model name (default: "grok-3-mini")
+    XAI_BASE_URL    — xAI API base URL (default: "https://api.x.ai/v1")
     TTS_ENGINE      — Text-to-speech engine name (default: "pyttsx3")
     TTS_RATE        — Text-to-speech voice rate in words-per-minute style units
     TTS_VOLUME      — Text-to-speech output volume in range 0.0–1.0
@@ -15,7 +17,7 @@ The database URL is hardcoded here (SQLite file in the backend/ folder)
 because it never needs to change between environments for this project.
 
 Usage in other files:
-    from app.core.config import GEMINI_API_KEY, DATABASE_URL
+    from app.core.config import GROK_API_KEY, GROK_MODEL, XAI_BASE_URL, DATABASE_URL
 """
 
 from pathlib import Path
@@ -28,9 +30,11 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 ENV_PATH = BACKEND_DIR / ".env"
 load_dotenv(dotenv_path=ENV_PATH, override=False)
 
-# Google Gemini API key — required for AI question generation in Phase 2.
-# If not set, the NLP services will fail when they try to call the Gemini API.
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+# xAI Grok API settings used by question generation and depth scoring.
+# Supports either GROK_API_KEY or XAI_API_KEY env variable names.
+GROK_API_KEY = os.getenv("GROK_API_KEY") or os.getenv("XAI_API_KEY", "")
+GROK_MODEL = os.getenv("GROK_MODEL", "grok-3-mini")
+XAI_BASE_URL = os.getenv("XAI_BASE_URL", "https://api.x.ai/v1")
 
 # Text-to-speech engine to use when reading questions aloud to the student.
 # Default is "pyttsx3" (works offline, no API key needed).
