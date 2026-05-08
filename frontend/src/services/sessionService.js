@@ -1,10 +1,11 @@
 import { apiClient } from './apiClient'
 
-export async function startSession({ studentId, subject, topicList }) {
+export async function startSession({ studentId, subject, topicList, pipelineMode }) {
   const response = await apiClient.post('/api/session/start', {
     student_id: studentId,
     subject,
     topic_list: topicList,
+    pipeline_mode: pipelineMode,
   })
   return response.data
 }

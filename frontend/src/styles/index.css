@@ -1,6 +1,7 @@
 @import './tokens.css';
 @import './base.css';
 @import './components.css';
+@import './pages/start-page.css';
 @import './pages/topic-selection.css';
 @import './pages/viva.css';
 @import './pages/report.css';

@@ -43,6 +43,10 @@ class Session(Base):
     # Stored as text because SQLite has no native array type.
     topic_list = Column(Text, nullable=True)   # JSON array stored as string
 
+    # Session-wide evaluation mode.
+    # Example values: "legacy_only", "grounded_only", "dual_compare"
+    pipeline_mode = Column(Text, nullable=True)
+
     # When the viva session started (UTC)
     start_time = Column(DateTime, default=datetime.utcnow)
 

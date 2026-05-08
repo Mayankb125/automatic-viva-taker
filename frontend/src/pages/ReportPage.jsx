@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 
-import { getReport } from '../services/reportService'
+import { downloadReportPdf, getReport } from '../services/reportService'
 
 function ReportPage() {
   const location = useLocation()
@@ -16,6 +16,7 @@ function ReportPage() {
   const [report, setReport] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [isDownloading, setIsDownloading] = useState(false)
 
   const reportSummary = location.state?.reportSummary
 
@@ -75,6 +76,27 @@ function ReportPage() {
   const integritySummary = report?.integrity_summary
   const integrityByType = integritySummary?.by_type || {}
   const recentIntegrityFlags = integritySummary?.recent_flags || []
+
+  async function handlePdfDownload() {
+    if (!sessionId) {
+      return
+    }
+
+    try {
+      setIsDownloading(true)
+      const pdfBlob = await downloadReportPdf(sessionId)
+      const downloadUrl = window.URL.createObjectURL(pdfBlob)
+      const anchor = document.createElement('a')
+      anchor.href = downloadUrl
+      anchor.download = `viva-report-${sessionId}.pdf`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      window.URL.revokeObjectURL(downloadUrl)
+    } finally {
+      setIsDownloading(false)
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -188,6 +210,10 @@ function ReportPage() {
           <Link to="/topics" className="action-link">
             Start Another Session
           </Link>
+
+          <button type="button" className="action-link" onClick={handlePdfDownload} disabled={isDownloading}>
+            {isDownloading ? 'Preparing PDF...' : 'Download PDF Report'}
+          </button>
 
           {hasSummaryPayload && (
             <p className="info-text report-inline-note">

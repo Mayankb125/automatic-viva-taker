@@ -24,6 +24,7 @@ from app.core.database import get_db
 from app.models.session import Session
 from app.models.score import Score
 from app.services.pillar2_nlp.adaptive_logic import make_session_state
+from app.services.pillar3_assessment.dual_pipeline.session_mode import normalize_pipeline_mode
 from app.services.pillar3_assessment.score_calculator import calculate_session_scores
 
 # All routes in this file get the /api/session prefix automatically
@@ -36,6 +37,7 @@ class StartSessionRequest(BaseModel):
     student_id: str
     subject: str
     topic_list: list[str] = Field(min_length=1)
+    pipeline_mode: str | None = "dual_compare"
 
 
 class EndSessionRequest(BaseModel):
@@ -58,6 +60,7 @@ def start_session(body: StartSessionRequest, db: DBSession = Depends(get_db)):
     subsequent question/answer requests.
     """
     session_id = str(uuid.uuid4())
+    selected_pipeline_mode = normalize_pipeline_mode(body.pipeline_mode, default="dual_compare")
 
     # Build the full adaptive state dict — drives all difficulty decisions
     adaptive_state = make_session_state(
@@ -74,6 +77,7 @@ def start_session(body: StartSessionRequest, db: DBSession = Depends(get_db)):
         subject=body.subject,
         topic=body.topic_list[0],               # start on the first topic
         topic_list=json.dumps(body.topic_list),
+        pipeline_mode=selected_pipeline_mode,
         status="active",
         adaptive_state=json.dumps(adaptive_state),
     )
@@ -84,6 +88,7 @@ def start_session(body: StartSessionRequest, db: DBSession = Depends(get_db)):
         "session_id": session_id,
         "current_topic": body.topic_list[0],
         "current_level": 1,
+        "pipeline_mode": selected_pipeline_mode,
     }
 
 
@@ -196,6 +201,7 @@ def get_session(session_id: str, db: DBSession = Depends(get_db)):
         "session_id": session_id,
         "student_id": db_session.student_id,
         "subject": db_session.subject,
+        "pipeline_mode": normalize_pipeline_mode(db_session.pipeline_mode, default="dual_compare"),
         "current_topic": db_session.topic,
         "topic_list": json.loads(db_session.topic_list) if db_session.topic_list else [],
         "status": db_session.status,

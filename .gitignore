@@ -18,7 +18,9 @@ backend/database.db
 data/sessions/
 data/reports/
 data/highlights/
+data/nlp_assets/
 backend/yolov8*.pt
+yolov8n.pt
 
 # Node
 frontend/node_modules/
@@ -30,3 +32,40 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Python virtualenvs
+.venv/
+venv/
+env/
+ENV/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build / packaging
+build/
+dist/
+pip-wheel-metadata/
+*.egg
+*.egg-info/
+
+# IDEs
+.idea/
+*.iml
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Frontend environment and caches
+frontend/.env.local
+frontend/.env.*.local
+.vite/
+.eslintcache
+.cache/

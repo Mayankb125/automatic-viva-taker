@@ -11,6 +11,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
 import AudioRecorder from '../components/viva/AudioRecorder'
+import ComparisonView from '../components/viva/ComparisonView'
+import GroundedScoreBreakdown from '../components/viva/GroundedScoreBreakdown'
 import IntegrityAlert from '../components/viva/IntegrityAlert'
 import QuestionDisplay from '../components/viva/QuestionDisplay'
 import TopicSwitchModal from '../components/viva/TopicSwitchModal'
@@ -36,6 +38,10 @@ function VivaPage() {
 
   const subject =
     location.state?.subject || localStorage.getItem('viva_subject') || 'Unknown subject'
+
+  const [pipelineMode, setPipelineMode] = useState(
+    location.state?.pipelineMode || localStorage.getItem('viva_pipeline_mode') || 'dual_compare'
+  )
 
   const [questionData, setQuestionData] = useState(null)
   const [audioBlob, setAudioBlob] = useState('')
@@ -90,6 +96,10 @@ function VivaPage() {
         if (Array.isArray(sessionData.topic_list) && sessionData.topic_list.length > 0) {
           setTopicList(sessionData.topic_list)
           localStorage.setItem('viva_topic_list', JSON.stringify(sessionData.topic_list))
+        }
+        if (sessionData.pipeline_mode) {
+          setPipelineMode(sessionData.pipeline_mode)
+          localStorage.setItem('viva_pipeline_mode', sessionData.pipeline_mode)
         }
       } catch {
         // If this fails, we still keep Step 3.2 working with existing state.
@@ -382,6 +392,9 @@ function VivaPage() {
           <p className="viva-meta-row">
             <strong>Subject:</strong> {subject}
           </p>
+          <p className="viva-meta-row">
+            <strong>Pipeline:</strong> {pipelineMode}
+          </p>
         </div>
 
         <WebcamFeed
@@ -495,18 +508,31 @@ function VivaPage() {
 
         {resultData && (
           <section className="viva-results" aria-live="polite">
-            <h2 className="section-heading">Score Breakdown</h2>
-            <div className="viva-score-grid">
-              <p><strong>Semantic:</strong> {score.semantic_score}</p>
-              <p><strong>Keyword:</strong> {score.keyword_score}</p>
-              <p><strong>Depth:</strong> {score.depth_score}</p>
-              <p><strong>Completeness:</strong> {score.completeness_score}</p>
-              <p><strong>Confidence:</strong> {score.confidence_score}</p>
-              <p><strong>Weighted:</strong> {score.weighted_score}</p>
-              <p><strong>Level Bonus:</strong> {score.level_bonus}</p>
-              <p><strong>Switch Penalty:</strong> {score.switch_penalty}</p>
-              <p className="viva-final-score"><strong>Final Score:</strong> {score.final_score}</p>
-            </div>
+            {/* Show comparison view if available (Phase 5.2 Step 5.2) */}
+            {resultData?.compare_mode_enabled && resultData?.comparison && (
+              <>
+                <ComparisonView comparison={resultData.comparison} />
+                <GroundedScoreBreakdown grounded={resultData.comparison.grounded} />
+              </>
+            )}
+
+            {/* Fallback to legacy view if comparison not available */}
+            {!resultData?.compare_mode_enabled && (
+              <>
+                <h2 className="section-heading">Score Breakdown</h2>
+                <div className="viva-score-grid">
+                  <p><strong>Semantic:</strong> {score.semantic_score}</p>
+                  <p><strong>Keyword:</strong> {score.keyword_score}</p>
+                  <p><strong>Depth:</strong> {score.depth_score}</p>
+                  <p><strong>Completeness:</strong> {score.completeness_score}</p>
+                  <p><strong>Confidence:</strong> {score.confidence_score}</p>
+                  <p><strong>Weighted:</strong> {score.weighted_score}</p>
+                  <p><strong>Level Bonus:</strong> {score.level_bonus}</p>
+                  <p><strong>Switch Penalty:</strong> {score.switch_penalty}</p>
+                  <p className="viva-final-score"><strong>Final Score:</strong> {score.final_score}</p>
+                </div>
+              </>
+            )}
 
             <h2 className="section-heading">Adaptive Decision</h2>
             <div className="viva-adaptive-box">

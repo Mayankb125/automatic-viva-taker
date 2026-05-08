@@ -106,6 +106,17 @@ def evaluate_answer(
     # Semantic returns 0–1 so multiply by 10 to put it on the same scale.
     semantic_normalised = semantic_score * 10.0
 
+    # Guardrail: confidence should not lift a clearly empty/incorrect answer.
+    # If all meaning/coverage signals are near zero, force confidence to zero.
+    low_signal = (
+        semantic_normalised < 1.0
+        and keyword_score < 1.0
+        and depth_score < 1.0
+        and completeness_score < 1.0
+    )
+    if low_signal:
+        confidence_score = 0.0
+
     # ── Step 3: Apply weighted formula ───────────────────────────────────────
     weighted_score = (
         semantic_normalised * WEIGHTS["semantic"]

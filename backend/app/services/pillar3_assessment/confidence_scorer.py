@@ -27,6 +27,14 @@ Usage:
 
 import re
 
+
+STOPWORDS = {
+    "a", "an", "the", "is", "it", "in", "on", "at", "to", "of",
+    "and", "or", "but", "for", "with", "as", "by", "from",
+    "that", "this", "was", "are", "be", "been", "have", "has",
+    "i", "we", "you", "he", "she", "they", "its", "do", "does",
+}
+
 # List of hesitation markers and uncertainty phrases.
 # All matched using regex word boundaries (\b) so "um" matches in "Um," and at
 # sentence start, not just when surrounded by spaces.
@@ -81,10 +89,11 @@ def score_confidence(student_answer: str) -> float:
     if not student_answer or not student_answer.strip():
         return 0.0  # Empty answer = zero confidence
 
-    answer_lower = student_answer.lower()
+    answer_lower = student_answer.lower().strip()
 
-    # Count total words in the answer for normalisation
-    word_count = len(student_answer.split())
+    # Tokenize into word-like units so punctuation-only inputs do not score high.
+    tokens = re.findall(r"[a-z0-9]+", answer_lower)
+    word_count = len(tokens)
     if word_count == 0:
         return 0.0
 
@@ -97,11 +106,29 @@ def score_confidence(student_answer: str) -> float:
         occurrences = len(re.findall(pattern, answer_lower))
         hesitation_count += occurrences
 
-    # Penalty formula: each hesitation costs proportional to answer length.
-    # Multiplier 25 means 1 hesitation per 25 words = 1 point deducted.
-    # Example: 3 hesitations in a 30-word answer → penalty = (3/30)*25 = 2.5 → score = 7.5
-    penalty = (hesitation_count / word_count) * 25
-    score = 10.0 - penalty
+    # Base hesitation penalty.
+    # 1 hesitation per 10 words removes ~2.5 points.
+    hesitation_penalty = (hesitation_count / word_count) * 25
+
+    # Content-quality penalties prevent "always 10" on vague/empty-like answers.
+    content_tokens = [token for token in tokens if token not in STOPWORDS]
+    content_count = len(content_tokens)
+    content_ratio = content_count / word_count
+    diversity = (len(set(content_tokens)) / content_count) if content_count else 0.0
+
+    quality_penalty = 0.0
+    if word_count < 6:
+        quality_penalty += 1.0
+    if content_count < 4:
+        quality_penalty += 3.0
+    elif content_count < 8:
+        quality_penalty += 1.5
+    if content_ratio < 0.35:
+        quality_penalty += 2.0
+    if content_count > 0 and diversity < 0.45:
+        quality_penalty += 1.5
+
+    score = 10.0 - hesitation_penalty - quality_penalty
 
     return round(max(0.0, min(10.0, score)), 2)
 

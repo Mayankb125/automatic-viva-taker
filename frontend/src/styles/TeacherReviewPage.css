@@ -1,0 +1,514 @@
+/* TeacherReviewPage.css */
+
+.teacher-review-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.teacher-review-header {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  color: white;
+  padding: 3rem 2rem;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.teacher-review-header h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 2.5rem;
+}
+
+.teacher-review-header .subtitle {
+  margin: 0.5rem 0 1.5rem 0;
+  font-size: 1.1rem;
+  opacity: 0.9;
+}
+
+.teacher-review-header .back-link {
+  display: inline-block;
+  color: #4dd0e1;
+  text-decoration: none;
+  font-size: 0.95rem;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  transition: background 0.3s ease;
+}
+
+.teacher-review-header .back-link:hover {
+  background: rgba(77, 208, 225, 0.1);
+}
+
+.teacher-review-main {
+  flex: 1;
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.error-message {
+  background: #ffebee;
+  color: #c62828;
+  padding: 1rem;
+  border-radius: 6px;
+  border-left: 4px solid #dc3545;
+  margin-bottom: 2rem;
+}
+
+.loading-text {
+  text-align: center;
+  color: #555;
+  font-size: 1.1rem;
+  padding: 2rem;
+}
+
+.no-data {
+  background: white;
+  padding: 3rem 2rem;
+  border-radius: 10px;
+  text-align: center;
+  color: #666;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Session Selector */
+.session-selector {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 10px;
+  margin-bottom: 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.session-selector h2 {
+  margin-top: 0;
+  color: #333;
+}
+
+.session-info {
+  color: #666;
+  margin: 0.5rem 0 0 0;
+}
+
+/* Flagged Answers Section */
+.flagged-answers-section {
+  margin-top: 2rem;
+}
+
+.flagged-answers-section h2 {
+  color: #333;
+  margin-bottom: 1.5rem;
+}
+
+.answers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.answer-card {
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.answer-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.answer-header {
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #f9f9f9 0%, #f0f0f0 100%);
+  border-left: 4px solid #0066cc;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.answer-header:hover {
+  background: linear-gradient(135deg, #f0f0f0 0%, #e8e8e8 100%);
+}
+
+.header-content {
+  flex: 1;
+}
+
+.answer-header h3 {
+  margin: 0 0 0.75rem 0;
+  color: #333;
+  font-size: 1.1rem;
+}
+
+.answer-meta {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+}
+
+.answer-meta span {
+  padding: 0.25rem 0.75rem;
+  background: white;
+  border-radius: 4px;
+}
+
+.original-score {
+  color: #0066cc;
+  font-weight: 600;
+}
+
+.overridden-score {
+  color: #28a745;
+  font-weight: 600;
+}
+
+.flag-count {
+  color: #dc3545;
+  font-weight: 600;
+}
+
+.expand-icon {
+  font-size: 1.2rem;
+  color: #999;
+  transition: transform 0.3s ease;
+}
+
+.answer-card.expanded .expand-icon {
+  transform: rotate(180deg);
+}
+
+/* Answer Details */
+.answer-details {
+  padding: 2rem;
+  border-top: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+  }
+}
+
+.student-answer-section {
+  background: #f9f9f9;
+  padding: 1.25rem;
+  border-radius: 8px;
+  border-left: 3px solid #0066cc;
+}
+
+.student-answer-section h4 {
+  margin-top: 0;
+  color: #333;
+}
+
+.student-answer-text {
+  margin: 0.75rem 0 0 0;
+  color: #555;
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+/* Flags Section */
+.flags-section h4 {
+  margin-top: 0;
+  color: #333;
+}
+
+.flags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.flag-tag {
+  display: inline-block;
+  background: #ffebee;
+  color: #c62828;
+  padding: 0.4rem 0.8rem;
+  border-radius: 16px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Score Comparison */
+.comparison-summary h4 {
+  margin-top: 0;
+  color: #333;
+}
+
+.score-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.score-col {
+  background: linear-gradient(135deg, #f9f9f9 0%, #f0f0f0 100%);
+  padding: 1.25rem;
+  border-radius: 8px;
+  text-align: center;
+  border-top: 3px solid #ddd;
+}
+
+.score-col h5 {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  color: #555;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.score-value {
+  font-size: 2.2rem;
+  font-weight: bold;
+  margin: 0.75rem 0;
+  line-height: 1;
+}
+
+.score-value.legacy {
+  color: #666;
+}
+
+.score-value.grounded {
+  color: #0066cc;
+}
+
+.score-value.delta {
+  color: #ff9800;
+}
+
+.score-band {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #666;
+}
+
+/* Feedback Summary */
+.feedback-summary h4 {
+  margin-top: 0;
+  color: #333;
+}
+
+.feedback-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.feedback-col {
+  background: linear-gradient(135deg, #f9f9f9 0%, #f0f0f0 100%);
+  padding: 1.25rem;
+  border-radius: 8px;
+}
+
+.feedback-col h5 {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  color: #555;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.feedback-text {
+  margin: 0.5rem 0;
+  color: #555;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.recommendation {
+  margin-top: 0.75rem;
+  font-style: italic;
+  color: #0066cc;
+}
+
+/* Override Section */
+.override-section h4 {
+  margin-top: 0;
+  color: #333;
+}
+
+.override-form {
+  background: #e3f2fd;
+  padding: 1.5rem;
+  border-radius: 8px;
+  border-left: 4px solid #1976d2;
+}
+
+.form-group {
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group:last-child {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #333;
+  font-size: 0.9rem;
+}
+
+.form-group input,
+.form-group textarea {
+  padding: 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #1976d2;
+  box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1);
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.btn-save-override {
+  background: #1976d2;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.btn-save-override:hover {
+  background: #1565c0;
+}
+
+.btn-save-override:active {
+  transform: scale(0.98);
+}
+
+/* Override Confirmed */
+.override-confirmed {
+  background: #e8f5e9;
+  padding: 1.5rem;
+  border-radius: 8px;
+  border-left: 4px solid #28a745;
+}
+
+.override-confirmed h4 {
+  margin-top: 0;
+  color: #2e7d32;
+}
+
+.override-info {
+  margin: 0.5rem 0;
+  color: #1b5e20;
+  font-weight: 600;
+}
+
+.override-reason {
+  margin: 0.5rem 0 0 0;
+  color: #2e7d32;
+  font-size: 0.9rem;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .teacher-review-main {
+    padding: 1.5rem;
+  }
+
+  .score-comparison-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .feedback-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .teacher-review-header {
+    padding: 2rem 1rem;
+  }
+
+  .teacher-review-header h1 {
+    font-size: 1.8rem;
+  }
+
+  .answer-header {
+    padding: 1rem;
+    flex-direction: column;
+    align-items: start;
+  }
+
+  .answer-meta {
+    gap: 1rem;
+  }
+
+  .answer-details {
+    padding: 1.5rem;
+    gap: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .teacher-review-header {
+    padding: 1.5rem 1rem;
+  }
+
+  .teacher-review-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .teacher-review-main {
+    padding: 1rem;
+  }
+
+  .score-col,
+  .feedback-col {
+    padding: 1rem;
+  }
+
+  .score-value {
+    font-size: 1.8rem;
+  }
+
+  .answer-meta {
+    gap: 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .answer-meta span {
+    padding: 0.25rem 0.5rem;
+  }
+}

@@ -1,4 +1,91 @@
+.topic-selection-card {
+  width: min(1200px, 100%);
+}
+
+.topic-selection-asset-card {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid #d8e6f5;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.topic-selection-asset-label {
+  margin: 0;
+  color: var(--color-brand-600);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.topic-selection-asset-title {
+  margin-top: 6px;
+  color: var(--color-ink-900);
+  font-size: 1.05rem;
+}
+
+.topic-selection-asset-meta {
+  margin-top: var(--space-2);
+  color: var(--color-ink-500);
+}
+
+.topic-selection-toolbar {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.topic-selection-count {
+  color: var(--color-ink-700);
+  font-weight: 600;
+}
+
+.topic-selection-topic-grid {
+  margin-top: var(--space-4);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--space-3);
+}
+
+.topic-selection-topic-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid #d8e6f5;
+  background: #fff;
+  box-shadow: var(--shadow-soft);
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-ink-900);
+}
+
+.topic-selection-topic-card input {
+  margin-top: 4px;
+}
+
+.topic-selection-topic-card.is-selected {
+  border-color: var(--color-brand-500);
+  background: linear-gradient(135deg, #e9f4ff 0%, #ffffff 100%);
+}
+
+.topic-selection-actions {
+  margin-top: var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
 .topic-selection-grid {
+  margin-top: var(--space-4);
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--space-3);
@@ -25,4 +112,11 @@
 .topic-selection-btn:disabled {
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+@media (max-width: 640px) {
+  .topic-selection-asset-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

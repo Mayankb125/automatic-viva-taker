@@ -12,6 +12,7 @@ Design goals:
 import base64
 import binascii
 import os
+import re
 import tempfile
 from typing import Iterable, Tuple
 
@@ -21,6 +22,13 @@ from app.core.config import WHISPER_MODEL_SIZE
 
 
 _model: WhisperModel | None = None
+
+_COMMON_SILENCE_HALLUCINATIONS = {
+    "thank you",
+    "thanks for watching",
+    "you",
+    "bye",
+}
 
 
 def _mime_to_extension(mime_type: str) -> str:
@@ -73,6 +81,33 @@ def _build_bias_prompt(topic: str | None = None, keywords: Iterable[str] | None 
         return None
 
     return " ".join(parts)
+
+
+def _normalize_transcript(text: str) -> str:
+    cleaned = re.sub(r"[^a-z0-9\s]", " ", (text or "").lower())
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _is_low_signal_transcript(transcript: str, avg_no_speech_prob: float) -> bool:
+    """
+    Reject transcripts likely produced from silence/noise.
+
+    This keeps the scoring pipeline from evaluating hallucinated one-word output
+    when the user did not speak.
+    """
+    normalized = _normalize_transcript(transcript)
+    if not normalized:
+        return True
+
+    if normalized in _COMMON_SILENCE_HALLUCINATIONS:
+        return True
+
+    tokens = normalized.split()
+    # Very short transcripts with high no-speech probability are usually silence artifacts.
+    if len(tokens) <= 2 and avg_no_speech_prob >= 0.55:
+        return True
+
+    return False
 
 
 def decode_audio_blob(audio_blob: str) -> Tuple[bytes, str]:
@@ -132,10 +167,24 @@ def transcribe_audio_bytes(
             temp_file_path,
             language="en",
             initial_prompt=bias_prompt,
+            vad_filter=True,
         )
-        transcript = " ".join(segment.text.strip() for segment in segments if segment.text).strip()
 
-        if not transcript:
+        segment_list = list(segments)
+        transcript = " ".join(segment.text.strip() for segment in segment_list if segment.text).strip()
+
+        no_speech_scores = [
+            float(getattr(segment, "no_speech_prob", 0.0))
+            for segment in segment_list
+            if getattr(segment, "text", "").strip()
+        ]
+        avg_no_speech_prob = (
+            sum(no_speech_scores) / len(no_speech_scores)
+            if no_speech_scores
+            else 1.0
+        )
+
+        if not transcript or _is_low_signal_transcript(transcript, avg_no_speech_prob):
             raise ValueError("no speech detected in audio")
 
         return transcript

@@ -6,7 +6,7 @@ The core of the exam experience. Handles the question-answer cycle.
 All routes are prefixed with /api/viva.
 
 Endpoints:
-    GET  /api/viva/question    — Get the next AI-generated question for the student
+    GET  /api/viva/question    — Get the next deterministic NLP question for the student
     POST /api/viva/answer      — Submit the student's audio answer for scoring
 """
 
@@ -30,6 +30,13 @@ from app.services.pillar2_nlp.adaptive_logic import process_answer
 from app.services.pillar2_nlp.speech_to_text import transcribe_audio_blob
 from app.services.pillar2_nlp.text_to_speech import synthesize_question_audio
 from app.services.pillar3_assessment.answer_evaluator import evaluate_answer
+from app.services.pillar3_assessment.dual_pipeline.pipeline_router import select_active_mode_result
+from app.services.pillar3_assessment.dual_pipeline.result_merger import build_api_response_payload, build_score_row_payload
+from app.services.pillar3_assessment.dual_pipeline.session_mode import resolve_pipeline_mode
+from app.services.pillar3_assessment.rubric_evaluator import (
+    build_legacy_rubric,
+    evaluate_answer_with_rubric,
+)
 
 # All routes in this file get the /api/viva prefix automatically
 router = APIRouter(prefix="/api/viva", tags=["viva"])
@@ -40,7 +47,8 @@ router = APIRouter(prefix="/api/viva", tags=["viva"])
 class SubmitAnswerRequest(BaseModel):
     session_id: str
     question_id: str
-    audio_blob: str
+    answer_text: str | None = None
+    audio_blob: str | None = None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -48,10 +56,10 @@ class SubmitAnswerRequest(BaseModel):
 @router.get("/question")
 def get_question(session_id: str, db: DBSession = Depends(get_db)):
     """
-    Generate and return the next AI question for the active session.
+    Generate and return the next deterministic question for the active session.
 
     Reads current_topic and current_level from the session's adaptive state,
-    calls Gemini to produce a question, saves a Question row to the DB, and
+    builds a local question payload, saves a Question row to the DB, and
     returns the question text + metadata to the frontend.
     """
     # Load the session
@@ -79,13 +87,10 @@ def get_question(session_id: str, db: DBSession = Depends(get_db)):
     )
     recent_questions = [row[0] for row in recent_rows if row and row[0]]
 
-    # ── Call Gemini to generate the question ───────────────────────────────
-    # generate_question makes an external Gemini API call which can fail due to
-    # network errors, rate limits, or API timeouts. Return a 503 instead of a
-    # raw 500 traceback so the frontend can display a meaningful message.
+    # ── LLM-first question generation with deterministic fallback ──────────
     generated = None
     last_generation_error = None
-    for attempt in range(4):
+    for attempt in range(3):
         try:
             generated = generate_question(
                 topic=current_topic,
@@ -96,17 +101,17 @@ def get_question(session_id: str, db: DBSession = Depends(get_db)):
         except Exception as exc:
             last_generation_error = exc
             logger.warning(
-                "generate_question attempt %s/4 failed for topic %s level %s: %s",
+                "generate_question attempt %s/3 failed for topic %s level %s: %s",
                 attempt + 1,
                 current_topic,
                 current_level,
                 exc,
             )
-            time.sleep(0.5)
+            time.sleep(0.4)
 
     if generated is None:
-        logger.exception(
-            "generate_question failed after retries for topic %s level %s; using fallback question. Last error: %s",
+        logger.warning(
+            "LLM question generation unavailable for topic %s level %s; using deterministic fallback. Last error: %s",
             current_topic,
             current_level,
             last_generation_error,
@@ -116,6 +121,11 @@ def get_question(session_id: str, db: DBSession = Depends(get_db)):
             level=current_level,
             recent_questions=recent_questions,
         )
+
+    # ── Keep LLM-generated fields as canonical scoring reference ───────────
+    source_chunk_ids: list[str] = []
+    rubric_payload: dict | None = None
+    generation_mode = "llm_generated"
 
     # ── Convert question text to spoken audio ─────────────────────────────
     try:
@@ -137,6 +147,11 @@ def get_question(session_id: str, db: DBSession = Depends(get_db)):
         expected_answer=generated["expected_answer"],
         key_keywords=json.dumps(generated["key_keywords"]),
         key_points=json.dumps(generated["key_points"]),
+        source_chunk_ids=json.dumps(source_chunk_ids) if source_chunk_ids else None,
+        rubric_json=json.dumps(rubric_payload) if rubric_payload else None,
+        pipeline_mode=generation_mode,
+        generation_mode=generation_mode,
+        rubric_version=(rubric_payload or {}).get("rubric_version"),
         level=current_level,
     )
     db.add(db_question)
@@ -153,6 +168,19 @@ def get_question(session_id: str, db: DBSession = Depends(get_db)):
         "question_audio_mime": question_audio_mime,
         "level": current_level,
         "topic": current_topic,
+        "source_chunk_ids": source_chunk_ids,
+        "rubric_json": rubric_payload,
+        "rubric_version": (rubric_payload or {}).get("rubric_version"),
+        "generation_mode": generation_mode,
+        "pipeline_mode": generation_mode,
+        "grounding": {
+            "is_grounded": bool(source_chunk_ids and rubric_payload),
+            "asset_id": None,
+            "source_chunk_ids": source_chunk_ids,
+            "rubric_json": rubric_payload,
+            "rubric_version": (rubric_payload or {}).get("rubric_version"),
+            "generation_mode": generation_mode,
+        },
     }
 
 
@@ -161,13 +189,14 @@ def submit_answer(body: SubmitAnswerRequest, db: DBSession = Depends(get_db)):
     """
     Score the student's answer and update the adaptive session state.
 
-    Pipeline:
-      1. Load Session + Question from DB
-      2. Run all 5 scorers via evaluate_answer()
-      3. Save a Score row with the full breakdown
-      4. Run process_answer() to get the adaptive decision
-      5. Persist updated adaptive state back to the Session row
-      6. Return score breakdown + adaptive decision to the frontend
+        Pipeline:
+            1. Load Session + Question from DB
+            2. Score the answer with the legacy evaluator
+            3. Score the same answer with the grounded evaluator
+            4. Save a Score row with both payloads
+            5. Pick the active mode result and run process_answer()
+            6. Persist updated adaptive state back to the Session row
+            7. Return combined compare payload to the frontend
 
     The 'adaptive.show_topic_modal' flag in the response is True when the student
     must pick a new topic (checkpoint failed twice) — the frontend should show
@@ -192,45 +221,85 @@ def submit_answer(body: SubmitAnswerRequest, db: DBSession = Depends(get_db)):
     switched = len(adaptive_state["switched_topics"]) > 0
 
     # Parse the JSON-string arrays stored in the Question row
-    key_keywords = json.loads(db_question.key_keywords) if db_question.key_keywords else []
-    key_points = json.loads(db_question.key_points) if db_question.key_points else []
-
-    # ── Speech-to-text: audio blob -> transcript ──────────────────────────
     try:
-        transcribed_answer = transcribe_audio_blob(
-            body.audio_blob,
-            topic=adaptive_state.get("current_topic"),
-            keywords=key_keywords,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid audio input: {exc}")
-    except Exception as exc:
-        logger.exception("Speech transcription failed for question %s: %s", body.question_id, exc)
-        raise HTTPException(
-            status_code=503,
-            detail="Transcription service temporarily unavailable — please record again.",
-        )
+        key_keywords = json.loads(db_question.key_keywords) if db_question.key_keywords else []
+    except json.JSONDecodeError:
+        key_keywords = []
 
-    # ── Run all 5 scorers ─────────────────────────────────────────────────
-    # evaluate_answer makes an external Gemini API call (depth scorer) which
-    # can fail due to network errors, rate limits, or API timeouts.
-    # Catch those failures and return a clear 503 rather than a raw 500 traceback.
     try:
-        eval_result = evaluate_answer(
+        key_points = json.loads(db_question.key_points) if db_question.key_points else []
+    except json.JSONDecodeError:
+        key_points = []
+
+    # Always build grounded rubric from the LLM-generated reference fields.
+    # This keeps both pipelines anchored to the same expected-answer payload.
+    rubric_payload = build_legacy_rubric(
+        expected_answer=db_question.expected_answer or "",
+        key_keywords=key_keywords,
+        key_points=key_points,
+    )
+
+    # ── Resolve answer text ───────────────────────────────────────────────
+    if body.answer_text and body.answer_text.strip():
+        transcribed_answer = body.answer_text.strip()
+    elif body.audio_blob:
+        try:
+            transcribed_answer = transcribe_audio_blob(
+                body.audio_blob,
+                topic=adaptive_state.get("current_topic"),
+                keywords=key_keywords,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid audio input: {exc}")
+        except Exception as exc:
+            logger.exception("Speech transcription failed for question %s: %s", body.question_id, exc)
+            raise HTTPException(
+                status_code=503,
+                detail="Transcription service temporarily unavailable — please record again.",
+            )
+    else:
+        raise HTTPException(status_code=400, detail="Provide answer_text or audio_blob")
+
+    pipeline_mode = resolve_pipeline_mode(db_session.pipeline_mode, db_question.pipeline_mode)
+
+    # ── Run both scorers so the API can compare outputs ──────────────────
+    try:
+        legacy_result = evaluate_answer(
             question=db_question.question_text,
-            expected_answer=db_question.expected_answer,
+            expected_answer=db_question.expected_answer or "",
             student_answer=transcribed_answer,
             key_keywords=key_keywords,
             key_points=key_points,
             current_level=adaptive_state["current_level"],
-            switched=switched,
+            switched=len(adaptive_state["switched_topics"]) > 0,
+        )
+        grounded_result = evaluate_answer_with_rubric(
+            question=db_question.question_text,
+            student_answer=transcribed_answer,
+            rubric=rubric_payload,
+            current_level=adaptive_state["current_level"],
+            switched=len(adaptive_state["switched_topics"]) > 0,
         )
     except Exception as exc:
-        logger.exception("evaluate_answer failed for question %s: %s", body.question_id, exc)
+        logger.exception("deterministic rubric scoring failed for question %s: %s", body.question_id, exc)
         raise HTTPException(
             status_code=503,
             detail="Scoring service temporarily unavailable — please resubmit your answer.",
         )
+
+    active_mode_result = select_active_mode_result(
+        pipeline_mode=pipeline_mode,
+        legacy_result=legacy_result,
+        grounded_result=grounded_result,
+        dual_compare_policy="score_max",
+    )
+    active_final_score = active_mode_result["final_score"]
+    score_row_payload = build_score_row_payload(
+        pipeline_mode=pipeline_mode,
+        active_mode_result=active_mode_result,
+        legacy_result=legacy_result,
+        grounded_result=grounded_result,
+    )
 
     # ── Save Score row ────────────────────────────────────────────────────
     db_score = Score(
@@ -239,20 +308,39 @@ def submit_answer(body: SubmitAnswerRequest, db: DBSession = Depends(get_db)):
         session_id=body.session_id,
         topic=adaptive_state["current_topic"],
         student_answer=transcribed_answer,
-        semantic_score=eval_result["semantic_score"],
-        keyword_score=eval_result["keyword_score"],
-        depth_score=eval_result["depth_score"],
-        completeness_score=eval_result["completeness_score"],
-        confidence_score=eval_result["confidence_score"],
-        final_score=eval_result["final_score"],
-        depth_reason=eval_result["depth_reason"],
-        completeness_reason=eval_result["completeness_reason"],
+        semantic_score=score_row_payload["semantic_score"],
+        keyword_score=score_row_payload["keyword_score"],
+        depth_score=score_row_payload["depth_score"],
+        completeness_score=score_row_payload["completeness_score"],
+        confidence_score=score_row_payload["confidence_score"],
+        final_score=score_row_payload["final_score"],
+        depth_reason=score_row_payload["depth_reason"],
+        completeness_reason=score_row_payload["completeness_reason"],
+        scoring_version=score_row_payload["scoring_version"],
+        scoring_mode=score_row_payload["scoring_mode"],
+        raw_weighted_score=score_row_payload["raw_weighted_score"],
+        total_penalty=score_row_payload["total_penalty"],
+        level_bonus_applied=score_row_payload["level_bonus_applied"],
+        score_band=score_row_payload["score_band"],
+        legacy_score_json=json.dumps(score_row_payload["legacy_score_json"]),
+        grounded_score_json=json.dumps(score_row_payload["grounded_score_json"]),
+        feature_breakdown_json=json.dumps(score_row_payload["feature_breakdown_json"]),
+        penalties_json=json.dumps(score_row_payload["penalties_json"]),
+        flags_json=json.dumps(score_row_payload["flags_json"]),
+        matched_must_concepts_json=json.dumps(score_row_payload["matched_must_concepts_json"]),
+        missing_must_concepts_json=json.dumps(score_row_payload["missing_must_concepts_json"]),
+        matched_optional_concepts_json=json.dumps(score_row_payload["matched_optional_concepts_json"]),
+        matched_phrases_json=json.dumps(score_row_payload["matched_phrases_json"]),
+        missing_phrases_json=json.dumps(score_row_payload["missing_phrases_json"]),
+        rubric_snapshot_json=json.dumps(rubric_payload),
+        feedback_summary=score_row_payload["feedback_summary"],
+        recommendation=score_row_payload["recommendation"],
         adaptive_decision=None,   # filled in after process_answer runs
     )
     db.add(db_score)
 
     # ── Run adaptive logic ────────────────────────────────────────────────
-    updated_state = process_answer(adaptive_state, eval_result["final_score"])
+    updated_state = process_answer(adaptive_state, active_final_score)
     db_score.adaptive_decision = updated_state["decision"]
 
     # Sync session row: topic may have changed, session may now be completed
@@ -263,28 +351,12 @@ def submit_answer(body: SubmitAnswerRequest, db: DBSession = Depends(get_db)):
 
     db.commit()
 
-    return {
-        "transcribed_text": transcribed_answer,
-        "score_breakdown": {
-            "semantic_score":     eval_result["semantic_score"],
-            "keyword_score":      eval_result["keyword_score"],
-            "depth_score":        eval_result["depth_score"],
-            "completeness_score": eval_result["completeness_score"],
-            "confidence_score":   eval_result["confidence_score"],
-            "weighted_score":     eval_result["weighted_score"],
-            "level_bonus":        eval_result["level_bonus"],
-            "switch_penalty":     eval_result["switch_penalty"],
-            "final_score":        eval_result["final_score"],
-        },
-        "feedback": {
-            "depth_reason":        eval_result["depth_reason"],
-            "completeness_reason": eval_result["completeness_reason"],
-        },
-        "adaptive": {
-            "decision":         updated_state["decision"],
-            "show_topic_modal": updated_state["show_topic_modal"],
-            "current_topic":    updated_state["current_topic"],
-            "current_level":    updated_state["current_level"],
-            "total_questions":  updated_state["total_questions_asked"],
-        },
-    }
+    return build_api_response_payload(
+        compare_mode_enabled=pipeline_mode == "dual_compare",
+        transcribed_text=transcribed_answer,
+        pipeline_mode=pipeline_mode,
+        legacy_result=legacy_result,
+        grounded_result=grounded_result,
+        active_mode_result=active_mode_result,
+        updated_state=updated_state,
+    )

@@ -16,12 +16,14 @@
  */
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import StartPage from './pages/StartPage'
 import LoginPage from './pages/LoginPage'
 import RegistrationPage from './pages/RegistrationPage'
 import VerificationPage from './pages/VerificationPage'
 import TopicSelectionPage from './pages/TopicSelectionPage'
 import VivaPage from './pages/VivaPage'
 import ReportPage from './pages/ReportPage'
+import TeacherReviewPage from './pages/TeacherReviewPage'
 
 function App() {
   return (
@@ -33,8 +35,11 @@ function App() {
       }}
     >
       <Routes>
-        {/* Phase 3: route root directly to topics while auth remains a stub. */}
-        <Route path="/" element={<Navigate to="/topics" replace />} />
+        {/* Phase 3: route root to the knowledge start page. */}
+        <Route path="/" element={<Navigate to="/start" replace />} />
+
+        {/* Start — upload source material and preview chunking. */}
+        <Route path="/start" element={<StartPage />} />
 
         {/* Login — existing students sign in here */}
         <Route path="/login" element={<LoginPage />} />
@@ -54,6 +59,9 @@ function App() {
         {/* Report — view session results after the viva ends.
             :sessionId is a URL parameter, e.g. /report/abc-123 */}
         <Route path="/report/:sessionId" element={<ReportPage />} />
+
+        {/* Teacher Review — review flagged answers and adjust scores (Phase 5 Step 5.3) */}
+        <Route path="/teacher/review" element={<TeacherReviewPage />} />
       </Routes>
     </BrowserRouter>
   )

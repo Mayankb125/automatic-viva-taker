@@ -6,6 +6,13 @@ python-dotenv
 # Phase 2 — NLP Brain
 openai
 sentence-transformers
+pypdf
+python-docx
+scikit-learn
+rank-bm25
+# Optional OCR fallback for scanned PDFs
+pdf2image
+pytesseract
 # Phase 4 — Speech
 faster-whisper
 pyttsx3

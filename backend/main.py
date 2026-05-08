@@ -25,7 +25,7 @@ from app.core.database import engine, Base
 from app.models import student, session, question, score, integrity_flag
 
 # Import all route groups. Each module handles a different part of the API.
-from app.api import auth, topics, session as session_router, viva, cv, report
+from app.api import topics, session as session_router, viva, cv, report, knowledge, evaluation
 
 # Create the main FastAPI application instance.
 # 'title' appears in the Swagger UI at /docs.
@@ -54,18 +54,18 @@ Base.metadata.create_all(bind=engine)
 
 # Register all route groups with their URL prefixes.
 # Each router was created in its own file under app/api/.
-#   auth          -> /api/auth/*          (register, login, face verification)
 #   topics        -> /api/topics          (list all available exam topics)
 #   session       -> /api/session/*       (start, end, switch topic)
 #   viva          -> /api/viva/*          (get next question, submit answer)
 #   cv            -> /api/cv/*            (send webcam frame for proctoring analysis)
 #   report        -> /api/report/*        (get score report, download PDF)
-app.include_router(auth.router)
 app.include_router(topics.router)
 app.include_router(session_router.router)
 app.include_router(viva.router)
 app.include_router(cv.router)
 app.include_router(report.router)
+app.include_router(evaluation.router)
+app.include_router(knowledge.router)
 
 
 @app.get("/")
